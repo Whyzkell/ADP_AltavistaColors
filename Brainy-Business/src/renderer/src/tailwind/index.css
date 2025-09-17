@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilo de la barra de desplazamiento */
+::-webkit-scrollbar {
+  width: 4px; /* Ancho de la barra vertical */
+}
+
+::-webkit-scrollbar:horizontal {
+  height: 5px; /* Altura de la barra horizontal */
+}
+
+/* Estilo de la pista (fondo) */
+::-webkit-scrollbar-track {
+  background: #f1f1f100;
+}
+
+/* Estilo del "pulgar" (el elemento que se mueve) */
+::-webkit-scrollbar-thumb {
+  background: #8fd48e;
+  border-radius: 4px;
+}
+
+/* Color del "pulgar" al pasar el ratón por encima */
+::-webkit-scrollbar-thumb:hover {
+  background: #353636;
+}
