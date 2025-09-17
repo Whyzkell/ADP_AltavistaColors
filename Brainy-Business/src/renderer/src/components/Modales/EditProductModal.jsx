@@ -1,23 +1,23 @@
 // EditProductModal.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react'
 
 /* Usa tu Modal global si ya lo tienes */
 function Modal({ open, title, children, onClose }) {
-  if (!open) return null;
+  if (!open) return null
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute inset-0 flex items-start justify-center pt-24 px-4 sm:px-6">
         <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl ring-1 ring-neutral-200">
           <div className="p-6 sm:p-8">
-            <h3 className="text-2xl font-bold">{title}</h3>
+            <h3 className="text-2xl font-bold text-black">{title}</h3>
             <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
             <div className="mt-6">{children}</div>
           </div>
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function Field({ label, children }) {
@@ -26,63 +26,63 @@ function Field({ label, children }) {
       <label className="text-sm font-medium">{label}</label>
       {children}
     </div>
-  );
+  )
 }
 
-function InputGreen({ className = "", ...props }) {
+function InputGreen({ className = '', ...props }) {
   return (
     <input
       {...props}
       className={
-        "w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none " +
+        'w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none ' +
         className
       }
     />
-  );
+  )
 }
 
 export default function EditProductModal({ open, onClose, product, onSave }) {
   const [f, setF] = useState({
-    id: "",
-    nombre: "",
-    categoria: "",
-    precio: "",
-    codigo: "",
-    existencias: "",
-  });
+    id: '',
+    nombre: '',
+    categoria: '',
+    precio: '',
+    codigo: '',
+    existencias: ''
+  })
 
   // Prefill cuando abra o cambie producto
   useEffect(() => {
     if (product) {
       setF({
-        id: product.id ?? "",
-        nombre: product.nombre ?? "",
-        categoria: product.categoria ?? "",
-        precio: product.precio ?? "",
-        codigo: product.codigo ?? "",
-        existencias: product.existencias ?? "",
-      });
+        id: product.id ?? '',
+        nombre: product.nombre ?? '',
+        categoria: product.categoria ?? '',
+        precio: product.precio ?? '',
+        codigo: product.codigo ?? '',
+        existencias: product.existencias ?? ''
+      })
     }
-  }, [product, open]);
+  }, [product, open])
 
   const onChange = (e) => {
-    const { id, value } = e.target;
-    setF((s) => ({ ...s, [id]: value }));
-  };
+    const { id, value } = e.target
+    setF((s) => ({ ...s, [id]: value }))
+  }
 
   const submit = (e) => {
-    e.preventDefault();
+    e.preventDefault()
 
-    if (!f.nombre.trim()) return alert("Ingresa el nombre");
-    if (!f.categoria.trim()) return alert("Ingresa la categoría");
+    if (!f.nombre.trim()) return alert('Ingresa el nombre')
+    if (!f.categoria.trim()) return alert('Ingresa la categoría')
 
-    const precio = Number(f.precio);
-    const codigo = Number(f.codigo);
-    const existencias = Number(f.existencias);
+    const precio = Number(f.precio)
+    const codigo = Number(f.codigo)
+    const existencias = Number(f.existencias)
 
-    if (!isFinite(precio) || precio < 0) return alert("Precio inválido");
-    if (!Number.isInteger(codigo) || codigo <= 0) return alert("Código inválido");
-    if (!Number.isInteger(existencias) || existencias < 0) return alert("Existencias inválidas");
+    if (!isFinite(precio) || precio < 0) return alert('Precio inválido')
+    if (!Number.isInteger(codigo) || codigo <= 0) return alert('Código inválido')
+    if (!Number.isInteger(existencias) || existencias < 0) return alert('Existencias inválidas')
 
     const updated = {
       id: f.id, // conservamos el ID
@@ -90,12 +90,12 @@ export default function EditProductModal({ open, onClose, product, onSave }) {
       categoria: f.categoria.trim(),
       precio,
       codigo,
-      existencias,
-    };
+      existencias
+    }
 
-    onSave?.(updated);
-    onClose?.();
-  };
+    onSave?.(updated)
+    onClose?.()
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Editar producto">
@@ -162,5 +162,5 @@ export default function EditProductModal({ open, onClose, product, onSave }) {
         </div>
       </form>
     </Modal>
-  );
+  )
 }

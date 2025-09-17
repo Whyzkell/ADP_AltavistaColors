@@ -35,16 +35,41 @@ export default function CreditoFiscal() {
   const [detalle, setDetalle] = useState(null) // <- fila seleccionada
 
   const [items, setItems] = useState(() => [
-    { id: '#23456', cliente: 'Juan', fecha: '17/06/2025', direccion: 'Colonia SAN BENITO', total: 57 },
-    { id: '#23457', cliente: 'Juan', fecha: '17/06/2025', direccion: 'Colonia SAN BENITO', total: 57 },
-    { id: '#23458', cliente: 'Juan', fecha: '17/06/2025', direccion: 'Colonia SAN BENITO', total: 57 },
-    { id: '#23459', cliente: 'Juan', fecha: '17/06/2025', direccion: 'Colonia SAN BENITO', total: 57 },
+    {
+      id: '#23456',
+      cliente: 'Juan',
+      fecha: '17/06/2025',
+      direccion: 'Colonia SAN BENITO',
+      total: 57
+    },
+    {
+      id: '#23457',
+      cliente: 'Juan',
+      fecha: '17/06/2025',
+      direccion: 'Colonia SAN BENITO',
+      total: 57
+    },
+    {
+      id: '#23458',
+      cliente: 'Juan',
+      fecha: '17/06/2025',
+      direccion: 'Colonia SAN BENITO',
+      total: 57
+    },
+    {
+      id: '#23459',
+      cliente: 'Juan',
+      fecha: '17/06/2025',
+      direccion: 'Colonia SAN BENITO',
+      total: 57
+    }
   ])
 
   const filtered = useMemo(
-    () => items.filter((r) =>
-      [r.id, r.cliente, r.direccion].join(' ').toLowerCase().includes(query.toLowerCase())
-    ),
+    () =>
+      items.filter((r) =>
+        [r.id, r.cliente, r.direccion].join(' ').toLowerCase().includes(query.toLowerCase())
+      ),
     [items, query]
   )
 
@@ -69,7 +94,7 @@ export default function CreditoFiscal() {
     <main className="flex-1 p-6">
       <div className="max-w-7xl mx-auto">
         <div>
-          <h1 className="text-xl font-semibold">Credito Fiscal</h1>
+          <h1 className="text-xl font-semibold text-black">Credito Fiscal</h1>
           <p className="text-sm text-neutral-500">Creditos Fiscales</p>
         </div>
 
@@ -81,7 +106,9 @@ export default function CreditoFiscal() {
               placeholder="Buscar"
               className="outline-none text-sm bg-transparent w-full"
             />
-            <button className="grid place-items-center h-7 w-7 rounded-full hover:bg-neutral-100">🔍</button>
+            <button className="grid place-items-center h-7 w-7 rounded-full hover:bg-neutral-100">
+              🔍
+            </button>
           </div>
           <button
             onClick={() => setOpenCrear(true)}
@@ -110,7 +137,9 @@ export default function CreditoFiscal() {
                   <td className="px-4 py-3">{r.cliente}</td>
                   <td className="px-4 py-3">{r.fecha}</td>
                   <td className="px-4 py-3">{r.direccion}</td>
-                  <td className="px-4 py-3"><PillMoney value={r.total} /></td>
+                  <td className="px-4 py-3">
+                    <PillMoney value={r.total} />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="relative inline-block">
                       <button
@@ -122,8 +151,14 @@ export default function CreditoFiscal() {
                       </button>
                       {openMenu === idx && (
                         <Menu
-                          onView={() => { verDetalles(r); setOpenMenu(null) }}
-                          onDelete={() => { eliminar(r.id); setOpenMenu(null) }}
+                          onView={() => {
+                            verDetalles(r)
+                            setOpenMenu(null)
+                          }}
+                          onDelete={() => {
+                            eliminar(r.id)
+                            setOpenMenu(null)
+                          }}
                         />
                       )}
                     </div>
@@ -146,15 +181,14 @@ export default function CreditoFiscal() {
       <CreateCreditoFiscalModal
         open={openCrear}
         onClose={() => setOpenCrear(false)}
-        onCreate={(payload) => { handleCreate(payload); setOpenCrear(false) }}
+        onCreate={(payload) => {
+          handleCreate(payload)
+          setOpenCrear(false)
+        }}
       />
 
       {/* Ver detalles (completo) */}
-      <VerCreditoFiscalModal
-        open={!!detalle}
-        onClose={() => setDetalle(null)}
-        data={detalle}
-      />
+      <VerCreditoFiscalModal open={!!detalle} onClose={() => setDetalle(null)} data={detalle} />
     </main>
   )
 }

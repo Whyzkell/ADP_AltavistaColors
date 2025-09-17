@@ -12,9 +12,30 @@ export default function Dashboard() {
   const [creditos, setCreditos] = useState([])
 
   const previewInventory = [
-    { id: '#10001', nombre: 'Pintura', categoria: 'Herramientas', precio: '$10', codigo: '5001', stock: 20 },
-    { id: '#10002', nombre: 'Brocha', categoria: 'Herramientas', precio: '$5', codigo: '5002', stock: 15 },
-    { id: '#10003', nombre: 'Rodillo', categoria: 'Accesorios', precio: '$7', codigo: '5003', stock: 8 }
+    {
+      id: '#10001',
+      nombre: 'Pintura',
+      categoria: 'Herramientas',
+      precio: '$10',
+      codigo: '5001',
+      stock: 20
+    },
+    {
+      id: '#10002',
+      nombre: 'Brocha',
+      categoria: 'Herramientas',
+      precio: '$5',
+      codigo: '5002',
+      stock: 15
+    },
+    {
+      id: '#10003',
+      nombre: 'Rodillo',
+      categoria: 'Accesorios',
+      precio: '$7',
+      codigo: '5003',
+      stock: 8
+    }
   ]
 
   const handleCreateFactura = (factura) => {
@@ -31,7 +52,7 @@ export default function Dashboard() {
     <main className="flex-1 min-w-0">
       <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         <div>
-          <h1 className="text-xl font-semibold">Panel de control</h1>
+          <h1 className="text-xl text-black font-semibold">Panel de control</h1>
           <p className="text-sm text-neutral-500 max-w-xl">
             Este apartado es para visualizar todo con una vista previa
           </p>

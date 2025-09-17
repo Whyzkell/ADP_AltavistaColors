@@ -284,7 +284,7 @@ function Field({ label, children, small = false }) {
 function LabelSection({ children }) {
   return (
     <div>
-      <p className="font-semibold">{children}</p>
+      <p className="font-semibold text-black">{children}</p>
       <div className="mt-1 h-[3px] w-16 bg-neutral-900 rounded" />
     </div>
   )

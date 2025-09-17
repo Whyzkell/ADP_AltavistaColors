@@ -35,7 +35,7 @@ function Modal({ open, title, children, onClose }) {
       <div className="absolute inset-0 flex items-start justify-center pt-24 px-4 sm:px-6">
         <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl ring-1 ring-neutral-200">
           <div className="p-6 sm:p-8">
-            <h3 className="text-2xl font-bold">{title}</h3>
+            <h3 className="text-2xl font-bold text-black">{title}</h3>
             <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
             <div className="mt-6">{children}</div>
           </div>
@@ -74,9 +74,30 @@ export default function Iventario() {
 
   // productos ahora en estado para poder agregar/editar
   const [productos, setProductos] = useState([
-    { id: '#23456', nombre: 'Pintura', categoria: 'Basic Plan', precio: 1200, codigo: 4040, existencias: 50 },
-    { id: '#56489', nombre: 'Rodillo', categoria: 'Pro Plan', precio: 7000, codigo: 5050, existencias: 5 },
-    { id: '#98380', nombre: 'Aerosol', categoria: 'Pro Plan', precio: 7000, codigo: 6060, existencias: 65 }
+    {
+      id: '#23456',
+      nombre: 'Pintura',
+      categoria: 'Basic Plan',
+      precio: 1200,
+      codigo: 4040,
+      existencias: 50
+    },
+    {
+      id: '#56489',
+      nombre: 'Rodillo',
+      categoria: 'Pro Plan',
+      precio: 7000,
+      codigo: 5050,
+      existencias: 5
+    },
+    {
+      id: '#98380',
+      nombre: 'Aerosol',
+      categoria: 'Pro Plan',
+      precio: 7000,
+      codigo: 6060,
+      existencias: 65
+    }
   ])
 
   const filtered = productos.filter((p) =>
@@ -201,7 +222,7 @@ export default function Iventario() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div>
-          <h1 className="text-xl font-semibold">Inventario</h1>
+          <h1 className="text-xl font-semibold text-black">Inventario</h1>
           <p className="text-sm text-neutral-500">Inventario de productos</p>
         </div>
 
@@ -387,7 +408,12 @@ export default function Iventario() {
               <InputGreen id="nombre" value={editForm.nombre} onChange={onChangeEdit} required />
             </Field>
             <Field label="Categoría">
-              <InputGreen id="categoria" value={editForm.categoria} onChange={onChangeEdit} required />
+              <InputGreen
+                id="categoria"
+                value={editForm.categoria}
+                onChange={onChangeEdit}
+                required
+              />
             </Field>
             <Field label="Precio">
               <InputGreen

@@ -8,10 +8,12 @@ export default function InventoryPreview({ items = [] }) {
     <div className="mt-8">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Inventario</h2>
+          <h2 className="text-lg font-semibold text-black">Inventario</h2>
           <p className="text-sm text-neutral-500">Inventario de productos</p>
         </div>
-        <Button variant="soft">Ver</Button>
+        <a href="/Inventario">
+          <Button variant="soft">Ver</Button>
+        </a>
       </div>
 
       <div className="mt-4 hidden lg:grid grid-cols-12 text-xs text-neutral-500 px-2">

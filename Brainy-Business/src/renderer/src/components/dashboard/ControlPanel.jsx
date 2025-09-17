@@ -1,6 +1,8 @@
 import React from 'react'
 import Card from '../Cards/Card.jsx'
 import Button from '../Buttons/Button.jsx'
+import FacturaIcon from '../../../../../resources/Factura.png'
+import CreditoIcon from '../../../../../resources/CreditoFiscal.png'
 
 const Stat = ({ label, value }) => (
   <div className="flex-1 min-w-[140px]">
@@ -12,34 +14,43 @@ const Stat = ({ label, value }) => (
 export default function ControlPanel({ onCobrar, onCredito }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Card className="p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold">Ventas</p>
-          <Button className="px-3 py-1.5" variant="soft">Ver</Button>
-        </div>
+      <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
+        <p className="text-sm font-semibold text-black">Ventas</p>
         <div className="mt-4 flex flex-wrap gap-6">
-          <Stat label="Número de ventas" value="400" />
-          <Stat label="Mes" value="Septiembre" />
-          <Stat label="Ventas" value="$5698" />
+          <div>
+            <p className="text-[11px] uppercase text-neutral-500">Número de ventas</p>
+            <p className="text-lg text-black font-semibold">400</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase text-neutral-500">Mes</p>
+            <p className="text-lg text-black font-semibold">Septiembre</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase text-neutral-500">Ventas</p>
+            <p className="text-lg text-black font-semibold">$5698</p>
+          </div>
         </div>
-      </Card>
+      </div>
 
-      <Card className="p-4">
-        <p className="text-sm font-semibold">Cobrar</p>
-        <div className="mt-4 flex flex-wrap items-center gap-4">
-          {/* Abrir modal de Factura */}
-          <Button variant="soft" className="min-w-[120px]" onClick={onCobrar}>
-            <span className="inline-flex h-5 w-5 rounded-sm bg-neutral-200" />
+      <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
+        <p className="text-sm font-semibold text-black">Cobrar</p>
+        <div className="mt-4 flex flex-wrap gap-4">
+          <button
+            onClick={onCobrar}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+          >
+            <img src={FacturaIcon} className="w-5 h-5" />
             Factura
-          </Button>
-
-          {/* Abrir modal de Crédito Fiscal */}
-          <Button variant="soft" className="min-w-[140px]" onClick={onCredito}>
-            <span className="inline-flex h-5 w-5 rounded-sm bg-neutral-200" />
+          </button>
+          <button
+            onClick={onCredito}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+          >
+            <img src={CreditoIcon} className="w-5 h-5" />
             Crédito fiscal
-          </Button>
+          </button>
         </div>
-      </Card>
+      </div>
     </div>
   )
 }
