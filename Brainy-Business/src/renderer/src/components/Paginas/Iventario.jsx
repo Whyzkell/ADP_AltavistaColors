@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 /* ======= UI helpers ======= */
 const Pill = ({ value }) => {
@@ -45,45 +45,45 @@ function Modal({ open, title, children, onClose }) {
   )
 }
 
+/* ===== Inputs y Field para estilo consistente ===== */
+function Field({ label, children }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-sm font-medium">{label}</label>
+      {children}
+    </div>
+  )
+}
+function InputGreen({ className = '', ...props }) {
+  return (
+    <input
+      {...props}
+      className={
+        'w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none ' +
+        className
+      }
+    />
+  )
+}
+
 /* ======= Página ======= */
-export default function Inventario() {
+export default function Iventario() {
   const [query, setQuery] = useState('')
   const [openMenu, setOpenMenu] = useState(null)
   const [openAdd, setOpenAdd] = useState(false)
 
-  // productos ahora en estado para poder agregar
+  // productos ahora en estado para poder agregar/editar
   const [productos, setProductos] = useState([
-    {
-      id: '#23456',
-      nombre: 'Pintura',
-      categoria: 'Basic Plan',
-      precio: 1200,
-      codigo: 4040,
-      existencias: 50
-    },
-    {
-      id: '#56489',
-      nombre: 'Rodillo',
-      categoria: 'Pro Plan',
-      precio: 7000,
-      codigo: 5050,
-      existencias: 5
-    },
-    {
-      id: '#98380',
-      nombre: 'Aerosol',
-      categoria: 'Pro Plan',
-      precio: 7000,
-      codigo: 6060,
-      existencias: 65
-    }
+    { id: '#23456', nombre: 'Pintura', categoria: 'Basic Plan', precio: 1200, codigo: 4040, existencias: 50 },
+    { id: '#56489', nombre: 'Rodillo', categoria: 'Pro Plan', precio: 7000, codigo: 5050, existencias: 5 },
+    { id: '#98380', nombre: 'Aerosol', categoria: 'Pro Plan', precio: 7000, codigo: 6060, existencias: 65 }
   ])
 
   const filtered = productos.filter((p) =>
     [p.nombre, p.categoria, String(p.codigo)].join(' ').toLowerCase().includes(query.toLowerCase())
   )
 
-  /* ======= Estado del form del modal ======= */
+  /* ======= Estado del form del modal (AGREGAR) ======= */
   const [nuevo, setNuevo] = useState({
     nombre: '',
     categoria: '',
@@ -97,7 +97,7 @@ export default function Inventario() {
     setNuevo((s) => ({ ...s, [id]: value }))
   }
 
-  const resetForm = () =>
+  const resetFormNew = () =>
     setNuevo({ nombre: '', categoria: '', precio: '', codigo: '', existencias: '' })
 
   const agregarProducto = (e) => {
@@ -126,7 +126,74 @@ export default function Inventario() {
 
     setProductos((arr) => [prod, ...arr])
     setOpenAdd(false)
-    resetForm()
+    resetFormNew()
+  }
+
+  /* ======= Estado del modal (EDITAR) ======= */
+  const [openEdit, setOpenEdit] = useState(false)
+  const [editIdx, setEditIdx] = useState(null)
+  const [editForm, setEditForm] = useState({
+    id: '',
+    nombre: '',
+    categoria: '',
+    precio: '',
+    codigo: '',
+    existencias: ''
+  })
+
+  // abrir modal de editar con prefill
+  const onEditRow = (idx) => {
+    const p = filtered[idx] // idx es del array filtrado; necesitamos su índice real
+    // Mapear idx filtrado al índice real en productos:
+    const realIdx = productos.findIndex((x) => x.id === p.id)
+    if (realIdx === -1) return
+    setEditIdx(realIdx)
+    setEditForm({
+      id: productos[realIdx].id,
+      nombre: productos[realIdx].nombre,
+      categoria: productos[realIdx].categoria,
+      precio: productos[realIdx].precio,
+      codigo: productos[realIdx].codigo,
+      existencias: productos[realIdx].existencias
+    })
+    setOpenMenu(null)
+    setOpenEdit(true)
+  }
+
+  const onChangeEdit = (e) => {
+    const { id, value } = e.target
+    setEditForm((s) => ({ ...s, [id]: value }))
+  }
+
+  const guardarEdicion = (e) => {
+    e.preventDefault()
+    if (!editForm.nombre.trim()) return alert('Ingresa el nombre')
+    if (!editForm.categoria.trim()) return alert('Ingresa la categoría')
+
+    const precio = Number(editForm.precio)
+    const codigo = Number(editForm.codigo)
+    const existencias = Number(editForm.existencias)
+
+    if (!isFinite(precio) || precio < 0) return alert('Precio inválido')
+    if (!Number.isInteger(codigo) || codigo <= 0) return alert('Código inválido')
+    if (!Number.isInteger(existencias) || existencias < 0) return alert('Existencias inválidas')
+
+    setProductos((arr) =>
+      arr.map((p, i) =>
+        i === editIdx
+          ? {
+              ...p,
+              nombre: editForm.nombre.trim(),
+              categoria: editForm.categoria.trim(),
+              precio,
+              codigo,
+              existencias
+            }
+          : p
+      )
+    )
+    setOpenEdit(false)
+    setEditIdx(null)
   }
 
   return (
@@ -175,7 +242,7 @@ export default function Inventario() {
             </thead>
             <tbody className="divide-y divide-neutral-200">
               {filtered.map((p, idx) => (
-                <tr key={idx} className="relative">
+                <tr key={p.id} className="relative">
                   <td className="px-4 py-3 font-mono text-neutral-600">{p.id}</td>
                   <td className="px-4 py-3">{p.nombre}</td>
                   <td className="px-4 py-3">{p.categoria}</td>
@@ -194,7 +261,7 @@ export default function Inventario() {
                       </button>
                       {openMenu === idx && (
                         <Menu
-                          onEdit={() => alert(`Editar ${p.nombre}`)}
+                          onEdit={() => onEditRow(idx)}
                           onDelete={() => alert(`Eliminar ${p.nombre}`)}
                         />
                       )}
@@ -219,7 +286,7 @@ export default function Inventario() {
         open={openAdd}
         onClose={() => {
           setOpenAdd(false)
-          resetForm()
+          resetFormNew()
         }}
         title="Agregar producto"
       >
@@ -292,7 +359,83 @@ export default function Inventario() {
               type="button"
               onClick={() => {
                 setOpenAdd(false)
-                resetForm()
+                resetFormNew()
+              }}
+              className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* ===== Modal Editar Producto ===== */}
+      <Modal
+        open={openEdit}
+        onClose={() => {
+          setOpenEdit(false)
+          setEditIdx(null)
+        }}
+        title="Editar producto"
+      >
+        <form onSubmit={guardarEdicion} className="space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="ID">
+              <InputGreen value={editForm.id} readOnly />
+            </Field>
+            <Field label="Nombre">
+              <InputGreen id="nombre" value={editForm.nombre} onChange={onChangeEdit} required />
+            </Field>
+            <Field label="Categoría">
+              <InputGreen id="categoria" value={editForm.categoria} onChange={onChangeEdit} required />
+            </Field>
+            <Field label="Precio">
+              <InputGreen
+                id="precio"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editForm.precio}
+                onChange={onChangeEdit}
+                required
+              />
+            </Field>
+            <Field label="Código">
+              <InputGreen
+                id="codigo"
+                type="number"
+                min="1"
+                step="1"
+                value={editForm.codigo}
+                onChange={onChangeEdit}
+                required
+              />
+            </Field>
+            <Field label="Existencias">
+              <InputGreen
+                id="existencias"
+                type="number"
+                min="0"
+                step="1"
+                value={editForm.existencias}
+                onChange={onChangeEdit}
+                required
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+            <button
+              type="submit"
+              className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600"
+            >
+              Guardar Cambios
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpenEdit(false)
+                setEditIdx(null)
               }}
               className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500"
             >
@@ -302,26 +445,5 @@ export default function Inventario() {
         </form>
       </Modal>
     </main>
-  )
-}
-
-/* ===== Inputs y Field para estilo consistente ===== */
-function Field({ label, children }) {
-  return (
-    <div className="space-y-1">
-      <label className="text-sm font-medium">{label}</label>
-      {children}
-    </div>
-  )
-}
-function InputGreen({ className = '', ...props }) {
-  return (
-    <input
-      {...props}
-      className={
-        'w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none ' +
-        className
-      }
-    />
   )
 }

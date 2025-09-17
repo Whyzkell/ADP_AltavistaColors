@@ -9,15 +9,13 @@ const Stat = ({ label, value }) => (
   </div>
 )
 
-export default function ControlPanel({ onCobrar }) {
+export default function ControlPanel({ onCobrar, onCredito }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card className="p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold">Ventas</p>
-          <Button className="px-3 py-1.5" variant="soft">
-            Ver
-          </Button>
+          <Button className="px-3 py-1.5" variant="soft">Ver</Button>
         </div>
         <div className="mt-4 flex flex-wrap gap-6">
           <Stat label="Número de ventas" value="400" />
@@ -29,11 +27,14 @@ export default function ControlPanel({ onCobrar }) {
       <Card className="p-4">
         <p className="text-sm font-semibold">Cobrar</p>
         <div className="mt-4 flex flex-wrap items-center gap-4">
+          {/* Abrir modal de Factura */}
           <Button variant="soft" className="min-w-[120px]" onClick={onCobrar}>
             <span className="inline-flex h-5 w-5 rounded-sm bg-neutral-200" />
             Factura
           </Button>
-          <Button variant="soft" className="min-w-[140px]" onClick={onCobrar}>
+
+          {/* Abrir modal de Crédito Fiscal */}
+          <Button variant="soft" className="min-w-[140px]" onClick={onCredito}>
             <span className="inline-flex h-5 w-5 rounded-sm bg-neutral-200" />
             Crédito fiscal
           </Button>

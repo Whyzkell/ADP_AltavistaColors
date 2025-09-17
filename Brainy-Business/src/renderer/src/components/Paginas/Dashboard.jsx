@@ -2,41 +2,29 @@ import React, { useState } from 'react'
 import ControlPanel from '../dashboard/ControlPanel.jsx'
 import InventoryPreview from '../dashboard/InvetoryPreview.jsx'
 import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
+import CreateCreditoFiscalModal from '../Modales/CreateCreditoFiscalModal.jsx'
 
 export default function Dashboard() {
-  const [openCrear, setOpenCrear] = useState(false)
+  const [openCrearFactura, setOpenCrearFactura] = useState(false)
+  const [openCrearCredito, setOpenCrearCredito] = useState(false)
+
   const [facturas, setFacturas] = useState([])
+  const [creditos, setCreditos] = useState([])
+
   const previewInventory = [
-    {
-      id: '#10001',
-      nombre: 'Pintura',
-      categoria: 'Herramientas',
-      precio: '$10',
-      codigo: '5001',
-      stock: 20
-    },
-    {
-      id: '#10002',
-      nombre: 'Brocha',
-      categoria: 'Herramientas',
-      precio: '$5',
-      codigo: '5002',
-      stock: 15
-    },
-    {
-      id: '#10003',
-      nombre: 'Rodillo',
-      categoria: 'Accesorios',
-      precio: '$7',
-      codigo: '5003',
-      stock: 8
-    }
+    { id: '#10001', nombre: 'Pintura', categoria: 'Herramientas', precio: '$10', codigo: '5001', stock: 20 },
+    { id: '#10002', nombre: 'Brocha', categoria: 'Herramientas', precio: '$5', codigo: '5002', stock: 15 },
+    { id: '#10003', nombre: 'Rodillo', categoria: 'Accesorios', precio: '$7', codigo: '5003', stock: 8 }
   ]
 
-  const handleCreate = (factura) => {
-    // Aquí podrías llamar a tu backend. Por ahora guardamos en estado.
+  const handleCreateFactura = (factura) => {
     setFacturas((arr) => [factura, ...arr])
     console.log('Factura creada:', factura)
+  }
+
+  const handleCreateCredito = (credito) => {
+    setCreditos((arr) => [credito, ...arr])
+    console.log('Crédito Fiscal creado:', credito)
   }
 
   return (
@@ -49,16 +37,29 @@ export default function Dashboard() {
           </p>
         </div>
 
+        {/* Panel de acciones */}
         <div className="mt-4">
-          <ControlPanel onCobrar={() => setOpenCrear(true)} />
+          <ControlPanel
+            onCobrar={() => setOpenCrearFactura(true)}
+            onCredito={() => setOpenCrearCredito(true)}
+          />
         </div>
 
+        {/* Vista previa de inventario */}
         <InventoryPreview items={previewInventory} />
       </div>
+
+      {/* Modales */}
       <CreateInvoiceModal
-        open={openCrear}
-        onClose={() => setOpenCrear(false)}
-        onCreate={handleCreate}
+        open={openCrearFactura}
+        onClose={() => setOpenCrearFactura(false)}
+        onCreate={handleCreateFactura}
+      />
+
+      <CreateCreditoFiscalModal
+        open={openCrearCredito}
+        onClose={() => setOpenCrearCredito(false)}
+        onCreate={handleCreateCredito}
       />
     </main>
   )
