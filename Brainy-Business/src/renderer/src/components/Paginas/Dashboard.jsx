@@ -14,10 +14,10 @@ export default function Dashboard() {
   const previewInventory = [
     {
       id: '#10001',
-      nombre: 'Pintura',
-      categoria: 'Herramientas',
+      nombre: 'Pintura Blanca',
+      categoria: 'Pinturas',
       precio: '$10',
-      codigo: '5001',
+      codigo: '3000',
       stock: 20
     },
     {
@@ -31,7 +31,7 @@ export default function Dashboard() {
     {
       id: '#10003',
       nombre: 'Rodillo',
-      categoria: 'Accesorios',
+      categoria: 'Herramientas',
       precio: '$7',
       codigo: '5003',
       stock: 8

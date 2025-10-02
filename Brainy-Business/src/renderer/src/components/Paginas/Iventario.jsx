@@ -76,26 +76,26 @@ export default function Iventario() {
   const [productos, setProductos] = useState([
     {
       id: '#23456',
-      nombre: 'Pintura',
-      categoria: 'Basic Plan',
+      nombre: 'Pintura Blanca',
+      categoria: 'Pinturas',
       precio: 1200,
-      codigo: 4040,
+      codigo: 3000,
       existencias: 50
     },
     {
       id: '#56489',
       nombre: 'Rodillo',
-      categoria: 'Pro Plan',
+      categoria: 'Herramientas',
       precio: 7000,
       codigo: 5050,
       existencias: 5
     },
     {
       id: '#98380',
-      nombre: 'Aerosol',
-      categoria: 'Pro Plan',
+      nombre: 'Aerosol Negro',
+      categoria: 'Aeorosoles',
       precio: 7000,
-      codigo: 6060,
+      codigo: 5000,
       existencias: 65
     }
   ])
