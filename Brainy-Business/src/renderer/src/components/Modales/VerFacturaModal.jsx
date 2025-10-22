@@ -1,90 +1,115 @@
-import React from 'react'
+// src/renderer/src/Modales/VerFacturaModal.jsx
+import React, { useEffect, useState } from 'react'
+import ModalFactura from './ModalFactura.jsx'
+import { getInvoice } from '../../api' // asegúrate de tener esta función en api.js
 
-function Shell({ open, title, onClose, children }) {
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute inset-0 flex items-start justify-center pt-6 sm:pt-10 px-4 sm:px-6">
-        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl ring-1 ring-neutral-200">
-          <div className="p-6 sm:p-8">
-            <h3 className="text-2xl font-bold">{title}</h3>
-            <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
-            <div className="mt-6 max-h-[70vh] overflow-y-auto pr-1">{children}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+function fmtId(d) {
+  if (!d) return '#—'
+  if (typeof d.id === 'string') return d.id
+  if (d.numero) return `#${d.numero}`
+  if (typeof d.id === 'number') return `#${String(d.id).padStart(6, '0')}`
+  return '#—'
 }
 
-const Field = ({ label, value }) => (
-  <div className="space-y-1">
-    <label className="text-sm text-neutral-600">{label}</label>
-    <input
-      value={value ?? ''}
-      readOnly
-      className="w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none"
-    />
-  </div>
-)
-
 export default function VerFacturaModal({ open, onClose, data }) {
-  // data.payload viene del CreateInvoiceModal si la venta se creó desde ahí
-  const p = data?.payload || {}
-  const productos = p.productos || []
+  const [detalle, setDetalle] = useState(data || null)
+  const [loading, setLoading] = useState(false)
+  const idNum = typeof data?.id === 'number' ? data.id : null
 
-  const totalFinal = p?.resumen?.ventaTotal ?? data?.monto ?? 0
-  const cantidadProductos =
-    productos.reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0) || 0
+  useEffect(() => {
+    let alive = true
+    // si abren el modal con solo el id numérico, pide el detalle
+    if (open && idNum && !data?.items) {
+      ;(async () => {
+        try {
+          setLoading(true)
+          const full = await getInvoice(idNum)
+          if (alive) setDetalle(full)
+        } catch (e) {
+          console.error('getInvoice error', e)
+        } finally {
+          if (alive) setLoading(false)
+        }
+      })()
+    } else {
+      setDetalle(data || null)
+    }
+    return () => {
+      alive = false
+    }
+  }, [open, idNum, data])
+
+  if (!open) return null
+
+  const head = detalle || data
+  const items = head?.items || []
+  const titleId = fmtId(head)
 
   return (
-    <Shell open={open} onClose={onClose} title={`Factura No. ${data?.id?.replace('#', '') || ''}`}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Cliente" value={p.cliente || data?.cliente || ''} />
-        <Field label="Dirección" value={p.direccion || ''} />
-      </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Venta a cuenta de" value={p.ventaCuentaDe || ''} />
-        <Field label="DUI" value={p.dui || ''} />
-      </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Condiciones de pago" value={p.condiciones || ''} />
-        <Field label="NIT" value={p.nit || ''} />
-      </div>
-
-      <p className="mt-6 text-sm font-semibold">Productos</p>
-      <div className="mt-2 grid grid-cols-12 gap-3">
-        <div className="col-span-2 text-xs text-neutral-500">Cantidad</div>
-        <div className="col-span-5 text-xs text-neutral-500">Nombre</div>
-        <div className="col-span-2 text-xs text-neutral-500">Precio unitario</div>
-        <div className="col-span-3 text-xs text-neutral-500">Total</div>
-      </div>
-      {(productos.length ? productos : [{ cantidad: '', nombre: '', precioUnitario: '', total: '' }]).map(
-        (it, i) => (
-          <div key={i} className="mt-2 grid grid-cols-12 gap-3">
-            <input readOnly value={it.cantidad || ''} className="col-span-2 h-10 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 px-3" />
-            <input readOnly value={it.nombre || ''} className="col-span-5 h-10 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 px-3" />
-            <input readOnly value={it.precioUnitario ?? ''} className="col-span-2 h-10 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 px-3" />
-            <input readOnly value={it.total ?? ''} className="col-span-3 h-10 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 px-3" />
+    <ModalFactura open={open} onClose={onClose} title={`Factura ${titleId}`}>
+      {loading ? (
+        <p className="text-sm text-neutral-500">Cargando…</p>
+      ) : !head ? (
+        <p className="text-sm text-neutral-500">Sin datos</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <p>
+              <span className="font-medium">Cliente:</span> {head.cliente || '—'}
+            </p>
+            <p>
+              <span className="font-medium">Fecha:</span> {head.fecha_emision || head.fecha || '—'}
+            </p>
+            <p>
+              <span className="font-medium">Dirección:</span> {head.direccion || '—'}
+            </p>
+            <p>
+              <span className="font-medium">Total:</span> ${Number(head.total || 0).toFixed(2)}
+            </p>
           </div>
-        )
+
+          <div className="mt-2 bg-white rounded-xl ring-1 ring-neutral-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 text-left text-neutral-600">
+                <tr>
+                  <th className="px-4 py-2">Cant.</th>
+                  <th className="px-4 py-2">Producto</th>
+                  <th className="px-4 py-2">P. unit</th>
+                  <th className="px-4 py-2">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-200">
+                {items.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="px-4 py-4 text-neutral-400">
+                      Sin items
+                    </td>
+                  </tr>
+                )}
+                {items.map((it) => (
+                  <tr key={it.id}>
+                    <td className="px-4 py-2">{it.cantidad}</td>
+                    <td className="px-4 py-2">{it.nombre}</td>
+                    <td className="px-4 py-2">${Number(it.precio_unit).toFixed(2)}</td>
+                    <td className="px-4 py-2">
+                      ${Number(it.total ?? it.cantidad * it.precio_unit).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="h-10 px-4 rounded-xl text-white font-semibold bg-neutral-800"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       )}
-
-      <p className="mt-6 text-sm font-semibold">Resumen</p>
-      <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Cantidad de productos" value={String(cantidadProductos)} />
-        <Field label="Total final" value={`$${Number(totalFinal).toFixed(2)}`} />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5">
-        <button onClick={() => window.print()} className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600">
-          Imprimir
-        </button>
-        <button onClick={onClose} className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500">
-          Cancelar
-        </button>
-      </div>
-    </Shell>
+    </ModalFactura>
   )
 }

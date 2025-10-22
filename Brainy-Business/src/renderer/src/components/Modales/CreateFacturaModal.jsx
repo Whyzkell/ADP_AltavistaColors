@@ -1,11 +1,13 @@
-import React, { useMemo, useRef, useState } from 'react'
+// src/renderer/src/Modales/CreateFacturaModal.jsx
+import React, { useMemo, useRef, useState, useEffect } from 'react'
 import ModalFactura from './ModalFactura.jsx'
-import Button from '../Buttons/Button.jsx'
+import { fetchProducts, createInvoice } from '../../api'
 
-const emptyProd = { cant: 0, nombre: '', precio: 0 }
+const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0 }
 const PAGE_SIZE = 6
 
 export default function CreateInvoiceModal({ open, onClose, onCreate }) {
+  /* ---------- Datos de factura ---------- */
   const [f, setF] = useState({
     cliente: '',
     direccion: '',
@@ -16,15 +18,16 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
   })
   const up = (k, v) => setF((s) => ({ ...s, [k]: v }))
 
+  /* ---------- Productos de la factura ---------- */
   const [prods, setProds] = useState([{ ...emptyProd }])
-
   const setProd = (i, k, v) =>
     setProds((arr) =>
-      arr.map((p, idx) => (idx === i ? { ...p, [k]: k === 'nombre' ? v : Number(v || 0) } : p))
+      arr.map((p, idx) =>
+        idx === i ? { ...p, [k]: k === 'nombre' ? v : Number.isNaN(Number(v)) ? v : Number(v) } : p
+      )
     )
-
-  const addProd = () => setProds((p) => [...p, { ...emptyProd }])
-  const removeProd = (i) => setProds((arr) => arr.filter((_, idx) => idx !== i))
+  const addEmptyRow = () => setProds((p) => [...p, { ...emptyProd }])
+  const removeRow = (i) => setProds((arr) => arr.filter((_, idx) => idx !== i))
 
   const totalFila = (p) => Number(p.cant || 0) * Number(p.precio || 0)
 
@@ -34,51 +37,118 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     return { cantidad, total }
   }, [prods])
 
-  // ---- Carrusel vertical (snap) para productos ----
-  const pages = chunk(prods, PAGE_SIZE) // [[fila,fila,...], [fila...], ...]
+  /* ---------- Paginación vertical (snap) ---------- */
+  const pages = chunk(prods, PAGE_SIZE)
   const [pageIdx, setPageIdx] = useState(0)
-  const scrollRef = useRef(null)
   const pageRefs = useRef([])
-
   const goTo = (idx) => {
     const clamped = Math.max(0, Math.min(idx, pages.length - 1))
     setPageIdx(clamped)
     pageRefs.current[clamped]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  const handleSubmit = (e) => {
+  /* ---------- Buscador con autocompletado ---------- */
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [results, setResults] = useState([])
+
+  useEffect(() => {
+    let alive = true
+    const text = q.trim()
+    if (text.length < 2) {
+      setResults([])
+      return
+    }
+
+    const t = setTimeout(async () => {
+      try {
+        setBusy(true)
+        const rows = await fetchProducts(text)
+
+        // Filtro local por si el backend no filtró
+        const needle = text.toLowerCase()
+        const local = rows.filter((r) => {
+          const nombre = (r.nombre ?? '').toLowerCase()
+          const cat = (r.categoria ?? '').toLowerCase()
+          const codigo = String(r.codigo ?? '')
+          return nombre.includes(needle) || cat.includes(needle) || codigo.includes(text)
+        })
+
+        const mapped = local.map((r) => ({
+          pid: r.id ?? r.id_producto,
+          nombre: r.nombre,
+          precio: Number(r.precio ?? r.precio_unit ?? 0),
+          codigo: r.codigo,
+          categoria: r.categoria
+        }))
+
+        if (alive) setResults(mapped.slice(0, 50))
+      } catch (e) {
+        console.error('fetchProducts(q) error:', e)
+        if (alive) setResults([])
+      } finally {
+        if (alive) setBusy(false)
+      }
+    }, 250)
+
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [q])
+
+  const addFromSearch = (item) => {
+    setProds((arr) => {
+      const idx = arr.findIndex((p) => p.pid && p.pid === item.pid)
+      if (idx !== -1) {
+        const copy = [...arr]
+        copy[idx] = { ...copy[idx], cant: Number(copy[idx].cant || 0) + 1 }
+        return copy
+      }
+      return [...arr, { pid: item.pid, cant: 1, nombre: item.nombre, precio: item.precio }]
+    })
+    setQ('')
+    setResults([])
+    setTimeout(() => goTo(pages.length), 0)
+  }
+
+  /* ---------- Submit (crea en backend) ---------- */
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // Validación mínima
     if (!f.cliente.trim()) return alert('Ingresa el nombre del cliente')
     if (prods.length === 0 || resumen.total <= 0)
       return alert('Agrega al menos 1 producto con monto válido')
 
-    // Simulación de creación (frontend)
-    const factura = {
-      id: `#${Math.floor(100000 + Math.random() * 900000)}`,
-      fecha: new Date().toLocaleDateString('es-SV'),
-      ...f,
-      productos: prods,
-      total: resumen.total,
-      cantidadProductos: resumen.cantidad
-    }
+    // Llama a la API
+    const saved = await createInvoice({
+      cliente: f.cliente.trim(),
+      direccion: f.direccion.trim(),
+      dui: f.dui.trim(),
+      nit: f.nit.trim(),
+      condiciones: f.condiciones.trim(),
+      ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
+      productos: prods // los mismos del estado [{pid,cant,nombre,precio}]
+    })
 
-    onCreate?.(factura) // deja que el contenedor la maneje (ej: push a lista)
+    // Si quieres reflejarlo en la UI del listado:
+    onCreate?.(saved)
+
     // Reset
     setF({ cliente: '', direccion: '', ventaCuentaDe: '', dui: '', condiciones: '', nit: '' })
     setProds([{ ...emptyProd }])
+    setQ('')
+    setResults([])
     onClose?.()
   }
 
   return (
     <ModalFactura open={open} onClose={onClose} title="Crear Factura">
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* WRAPPER SCROLLABLE (carrusel) */}
-        <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto snap-y snap-mandatory pr-1">
-          {/* Slide 1: Título */}
-          <section className="snap-start"></section>
-
-          {/* Slide 2: Datos de cliente */}
+        {/* Contenido scrolleable */}
+        <div className="max-h-[55vh] overflow-y-auto snap-y snap-mandatory pr-1">
+          {/* Datos del cliente */}
           <section className="snap-start mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Field label="Cliente">
@@ -106,7 +176,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                 <InputGreen
                   value={f.dui}
                   onChange={(e) => up('dui', e.target.value)}
-                  placeholder="XXXXXXXXX-X"
+                  placeholder="XXXXXXXX-X"
                 />
               </Field>
               <Field label="Condiciones de pago">
@@ -120,35 +190,72 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                 <InputGreen
                   value={f.nit}
                   onChange={(e) => up('nit', e.target.value)}
-                  placeholder="XXXXXXXXX-X"
+                  placeholder="XXXXXXXX-X"
                 />
               </Field>
             </div>
           </section>
 
-          {/* Slide(s) 3..N: Productos paginados (vertical snap) */}
+          {/* Productos */}
           <section className="snap-start mt-8">
             <LabelSection>Productos</LabelSection>
 
-            {/* Buscador tipo “pill” */}
-            <div className="flex items-center gap-2 mt-3">
-              <input
-                placeholder="Buscar"
-                className="h-9 w-full rounded-full px-4 text-sm ring-1 ring-neutral-200 bg-white outline-none"
-              />
-              <button
-                type="button"
-                className="h-9 w-9 rounded-full grid place-items-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3-3" />
-                </svg>
-              </button>
+            {/* Buscador con sugerencias */}
+            <div className="relative mt-3">
+              <div className="flex items-center gap-2">
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Buscar producto por nombre / categoría / código"
+                  className="h-9 w-full rounded-full px-4 text-sm ring-1 ring-neutral-200 bg-white outline-none"
+                />
+                <button
+                  type="button"
+                  className="h-9 w-9 rounded-full grid place-items-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                  title="Buscar"
+                >
+                  {busy ? (
+                    '…'
+                  ) : (
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                    >
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3-3" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+
+              {results.length > 0 && (
+                <div className="absolute z-10 mt-2 w-full max-h-56 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-lg">
+                  {results.map((r) => (
+                    <button
+                      key={r.pid}
+                      type="button"
+                      onClick={() => addFromSearch(r)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between"
+                    >
+                      <span className="truncate">
+                        <span className="font-medium">{r.nombre}</span>
+                        {r.categoria ? (
+                          <span className="text-neutral-400"> • {r.categoria}</span>
+                        ) : null}
+                        {r.codigo ? <span className="text-neutral-400"> • {r.codigo}</span> : null}
+                      </span>
+                      <span className="ml-3 text-neutral-700">${Number(r.precio).toFixed(2)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Header de columnas */}
-            <div className="grid grid-cols-12 gap-3 text-sm text-neutral-600 mt-3">
+            {/* Header columnas */}
+            <div className="grid grid-cols-12 gap-3 text-sm text-neutral-600 mt-4">
               <div className="col-span-2">Cantidad</div>
               <div className="col-span-4 sm:col-span-5">Nombre</div>
               <div className="col-span-3 sm:col-span-2">Precio unitario</div>
@@ -156,6 +263,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
             </div>
           </section>
 
+          {/* Filas paginadas */}
           {pages.map((rows, idx) => (
             <section
               key={idx}
@@ -166,7 +274,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                 {rows.map((p, i) => {
                   const globalIndex = idx * PAGE_SIZE + i
                   return (
-                    <div key={globalIndex} className=" grid grid-cols-12 gap-2">
+                    <div key={globalIndex} className="grid grid-cols-12 gap-2 items-center">
                       <InputGreen
                         type="number"
                         min="0"
@@ -193,13 +301,21 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                       <InputGreen
                         readOnly
                         value={`$${(totalFila(p) || 0).toFixed(2)}`}
-                        className="col-span-3 sm:col-span-3"
+                        className="col-span-2 sm:col-span-2"
                       />
+                      <button
+                        type="button"
+                        onClick={() => removeRow(globalIndex)}
+                        className="col-span-1 text-rose-600 hover:text-rose-700"
+                        title="Eliminar fila"
+                      >
+                        ✕
+                      </button>
                     </div>
                   )
                 })}
               </div>
-              {/* Controles de navegación entre páginas (arriba/abajo) */}
+
               {pages.length > 1 && (
                 <div className="flex items-center justify-between mt-3">
                   <button
@@ -222,13 +338,12 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
             </section>
           ))}
 
-          {/* Botón degradado: Agregar producto */}
+          {/* Agregar fila manualmente */}
           <section className="snap-start mt-4">
             <button
               type="button"
               onClick={() => {
-                addProd()
-                // salta a la última página si se creó una nueva
+                addEmptyRow()
                 setTimeout(() => goTo(pages.length), 0)
               }}
               className="w-full h-11 rounded-xl font-semibold text-white bg-gradient-to-r from-sky-400 via-fuchsia-500 to-purple-500 shadow-sm"
@@ -237,7 +352,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
             </button>
           </section>
 
-          {/* Slide final: Resumen */}
+          {/* Resumen */}
           <section className="snap-start mt-8 pb-2">
             <LabelSection>Resumen</LabelSection>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-3">
@@ -251,13 +366,14 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           </section>
         </div>
 
-        {/* Botones pie fuera del área scrolleable (siempre visibles) */}
+        {/* Botonera inferior */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <button
             type="submit"
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600 shadow-sm"
+            disabled={submitting}
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600 shadow-sm disabled:opacity-60"
           >
-            Crear
+            {submitting ? 'Creando…' : 'Crear'}
           </button>
           <button
             type="button"
@@ -272,6 +388,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
   )
 }
 
+/* ---------- UI helpers ---------- */
 function Field({ label, children, small = false }) {
   return (
     <div className="space-y-1">
@@ -320,7 +437,6 @@ function Dots({ total, active, onClick }) {
   )
 }
 
-/* Utilidad para dividir en páginas */
 function chunk(arr, size) {
   const out = []
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))

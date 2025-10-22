@@ -23,6 +23,8 @@ app.use("/api/products", productsRoutes);
 // o si quieres GET público:
 // app.get('/api/products', productsRoutes);
 // app.use('/api/products', authMiddleware, productsRoutesProtegidas);
+const invoicesRoutes = require("./routes/invoices.routes");
+app.use("/api", invoicesRoutes);
 
 // Middleware de errores JSON
 app.use((err, _req, res, _next) => {

@@ -3,9 +3,49 @@ const router = express.Router();
 const db = require("../db");
 const auth = require("../middleware/authMiddleware");
 const ctrl = require("../controllers/productsController");
+const authMiddleware = require("../middleware/authMiddleware");
 
 // Todas requieren auth
 router.use(auth);
+
+// GET /api/products?q=texto
+router.get("/", auth, async (req, res) => {
+  try {
+    const q = (req.query.q || "").trim().toLowerCase();
+    const params = [];
+    let where = "";
+
+    if (q) {
+      params.push(`%${q}%`);
+      where = `
+        WHERE lower(nombre)    LIKE $1
+           OR lower(categoria) LIKE $1
+           OR CAST(codigo AS TEXT) LIKE $1
+      `;
+    }
+
+    const { rows } = await db.query(
+      `
+        SELECT
+          id,
+          nombre,
+          categoria,
+          precio_unit AS precio,   -- normalizamos el nombre
+          codigo,
+          existencias
+        FROM public.productos
+        ${where}
+        ORDER BY id DESC
+      `,
+      params
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error("GET /api/products error:", err);
+    res.status(500).json({ error: "Error interno" });
+  }
+});
 
 // GET /api/products
 router.get("/", async (req, res, next) => {
@@ -87,16 +127,26 @@ RETURNING id, nombre, categoria, precio_unit AS precio, codigo, existencias
 });
 
 // DELETE /api/products/:id
-router.delete("/:id", async (req, res, next) => {
+router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    await db.query("DELETE FROM productos WHERE id=$1", [id]);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
 
-    if (!rowCount)
+    const { rows } = await db.query(
+      "DELETE FROM public.productos WHERE id = $1 RETURNING id",
+      [id]
+    );
+
+    if (rows.length === 0) {
       return res.status(404).json({ error: "Producto no encontrado" });
-    res.json({ ok: true });
+    }
+
+    return res.json({ ok: true, id: rows[0].id });
   } catch (err) {
-    next(err);
+    console.error("DELETE /api/products/:id ->", err);
+    return res.status(500).json({ error: "Error interno" });
   }
 });
 
