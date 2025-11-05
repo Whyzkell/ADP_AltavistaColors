@@ -11,7 +11,11 @@ function Shell({ open, title, onClose, children }) {
           <div className="p-6 sm:p-8">
             <h3 className="text-2xl font-bold">{title}</h3>
             <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
-            <div className="mt-6 max-h-[70vh] overflow-y-auto pr-1">{children}</div>
+
+            {/* El div de scroll ya está corregido, ¡perfecto! */}
+            <div className="mt-6 max-h-[70vh] overflow-y-auto pr-1 print:max-h-none print:overflow-visible">
+              {children}
+            </div>
           </div>
         </div>
       </div>
@@ -23,7 +27,7 @@ const Input = ({ value }) => (
   <input
     readOnly
     value={value ?? ''}
-    className="w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none"
+    className="w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none print:bg-white print:ring-1 print:ring-neutral-300 print:h-9"
   />
 )
 const Field = ({ label, value }) => (
@@ -36,7 +40,6 @@ const Field = ({ label, value }) => (
 function fmtFecha(d) {
   if (!d) return ''
   try {
-    // Asume que puede venir como 'YYYY-MM-DD' o un ISO string
     return new Date(d).toLocaleDateString('es-SV', { timeZone: 'UTC' })
   } catch {
     return String(d)
@@ -44,42 +47,35 @@ function fmtFecha(d) {
 }
 
 export default function VerCreditoFiscalModal({ open, onClose, data }) {
-  // 'payload' es solo para los campos extra que guardaste en el JSON
   const payload = data?.payload || {}
-
-  // <-- CORREGIDO: Los productos vienen de 'data.items'
   const productos = data?.items || []
-
-  // <-- CORREGIDO: Los totales vienen del nivel principal de 'data'
   const sumas = data?.subtotal ?? 0
   const iva13 = data?.iva_13 ?? 0
   const ivaRet = data?.iva_retenido ?? 0
   const ventaTotal = data?.total ?? 0
 
   return (
-    // <-- CORREGIDO: Usar 'data.numero' para el título
     <Shell
       open={open}
       onClose={onClose}
       title={`Credito Fiscal No. ${data?.numero || data?.id || ''}`}
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* <-- CORREGIDO: Priorizar 'data.campo' sobre 'payload.campo' */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-4">
         <Field label="Cliente" value={data?.cliente || payload?.form?.cliente || ''} />
         <Field label="Dirección" value={data?.direccion || payload?.form?.direccion || ''} />
       </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-4">
         <Field label="Municipio" value={data?.municipio || payload?.form?.municipio || ''} />
         <Field label="NRC" value={data?.nrc || payload?.form?.nrc || ''} />
       </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-4">
         <Field
           label="Departamento"
           value={data?.departamento || payload?.form?.departamento || ''}
         />
         <Field label="NIT" value={data?.nit || payload?.form?.nit || ''} />
       </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-4">
         <Field
           label="Condiciones de operación"
           value={data?.condiciones_op || payload?.form?.condiciones || ''}
@@ -89,7 +85,7 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
           value={data?.nota_remision_ant || payload?.form?.notaAnterior || ''}
         />
       </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 print:grid print:grid-cols-2 print:gap-4">
         <Field
           label="Venta a cuenta de"
           value={data?.venta_cuenta_de || payload?.form?.ventaCuentaDe || ''}
@@ -105,23 +101,25 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
       </div>
 
       <p className="mt-6 text-sm font-semibold">Productos</p>
-      <div className="mt-2 grid grid-cols-12 gap-3">
-        <div className="col-span-2 text-xs text-neutral-500">Cantidad</div>
-        <div className="col-span-5 text-xs text-neutral-500">Nombre</div>
-        <div className="col-span-2 text-xs text-neutral-500">Precio unitario</div>
-        <div className="col-span-3 text-xs text-neutral-500">Total</div>
+      <div className="mt-2 grid grid-cols-12 gap-3 print:grid print:grid-cols-12 print:gap-3">
+        <div className="col-span-2 text-xs text-neutral-500 print:col-span-2">Cantidad</div>
+        <div className="col-span-5 text-xs text-neutral-500 print:col-span-5">Nombre</div>
+        <div className="col-span-2 text-xs text-neutral-500 print:col-span-2">Precio unitario</div>
+        <div className="col-span-3 text-xs text-neutral-500 print:col-span-3">Total</div>
       </div>
       {(productos.length ? productos : []).map((it, i) => (
-        <div key={it.id || i} className="mt-2 grid grid-cols-12 gap-3">
-          {/* <-- CORREGIDO: La API devuelve 'cant', 'precio', 'total' */}
+        <div
+          key={it.id || i}
+          className="mt-2 grid grid-cols-12 gap-3 print:grid print:grid-cols-12 print:gap-2"
+        >
           <Input value={it.cant} />
-          <div className="col-span-5">
+          <div className="col-span-5 print:col-span-5">
             <Input value={it.nombre} />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 print:col-span-2">
             <Input value={it.precio} />
           </div>
-          <div className="col-span-3">
+          <div className="col-span-3 print:col-span-3">
             <Input value={it.total} />
           </div>
         </div>
@@ -131,7 +129,7 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
       )}
 
       <p className="mt-6 text-sm font-semibold">Resumen</p>
-      <div className="mt-2 grid grid-cols-1 sm:grid-cols-5 gap-4">
+      <div className="mt-2 grid grid-cols-1 sm:grid-cols-5 gap-4 print:grid print:grid-cols-5 print:gap-4">
         <Field label="Sumas" value={Number(sumas).toFixed(2)} />
         <Field label="13% IVA" value={Number(iva13).toFixed(2)} />
         <Field label="Sub- Total" value={Number(sumas).toFixed(2)} />
@@ -143,15 +141,26 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
         Llenar si la operación es superior a <b>$11,428.58</b>
       </p>
 
-      {/* Estos campos SÍ viven en el payload, así que 'payload' está bien aquí */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
-        <Field label="Entregado por" value={payload?.entregadoPor || ''} />
-        <Field label="Recibido por" value={payload?.recibidoPor || ''} />
-        <Field label="DUI o NIT" value={payload?.duiEntregado || ''} />
-        <Field label="DUI o NIT" value={payload?.duiRecibido || ''} />
+      {/* --- INICIO DE CORRECCIÓN DE LAYOUT --- */}
+      {/*
+        Se reestructura este DIV para agrupar lógicamente
+        "Entregado" con su "DUI" y "Recibido" con el suyo.
+        Esto ayuda al navegador a saber dónde hacer el salto de página.
+      */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3 print:grid print:grid-cols-2 print:gap-4">
+        <div className="space-y-4">
+          <Field label="Entregado por" value={payload?.entregadoPor || ''} />
+          <Field label="DUI o NIT" value={payload?.duiEntregado || ''} />
+        </div>
+        <div className="space-y-4">
+          <Field label="Recibido por" value={payload?.recibidoPor || ''} />
+          <Field label="DUI o NIT" value={payload?.duiRecibido || ''} />
+        </div>
       </div>
+      {/* --- FIN DE CORRECCIÓN DE LAYOUT --- */}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5">
+      {/* Los botones ya están ocultos al imprimir, ¡perfecto! */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5 print:hidden">
         <button
           onClick={() => window.print()}
           className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600"

@@ -27,6 +27,7 @@ const invoicesRoutes = require("./routes/invoices.routes");
 app.use("/api", invoicesRoutes);
 
 app.use("/api", require("./routes/creditos.routes"));
+app.use("/api/stats", require("./routes/stats.routes"));
 
 // Middleware de errores JSON
 app.use((err, _req, res, _next) => {

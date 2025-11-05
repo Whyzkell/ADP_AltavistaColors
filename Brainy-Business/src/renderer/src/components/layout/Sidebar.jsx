@@ -1,3 +1,4 @@
+// src/components/layout/Sidebar.jsx
 import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import InicioIcon from '../../../../../resources/Dashboard.png'
@@ -7,6 +8,7 @@ import FacturaIcon from '../../../../../resources/Factura.png'
 import CreditoIcon from '../../../../../resources/CreditoFiscal.png'
 import SalirIcon from '../../../../../resources/Salir.png'
 import SoloLogo from '../../../../../resources/Logo.png'
+import Estadisticas from '../../../../../resources/Chart_Line.png'
 
 const SidebarLink = ({ label, to, icon }) => (
   <NavLink
@@ -21,7 +23,11 @@ const SidebarLink = ({ label, to, icon }) => (
   </NavLink>
 )
 
-export default function Sidebar() {
+// --- INICIO DE LA CORRECCIÓN ---
+// 1. Acepta 'className' como prop. Le damos un valor por defecto ''
+export default function Sidebar({ className = '' }) {
+  // --- FIN DE LA CORRECCIÓN ---
+
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -35,7 +41,13 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex fixed top-0 left-0 h-screen w-64 flex-col gap-4 border-r bg-white shadow-sm">
+    // --- INICIO DE LA CORRECCIÓN ---
+    // 2. Añade el prop 'className' al final de la lista de clases
+    <aside
+      className={`hidden md:flex fixed top-0 left-0 h-screen w-64 flex-col gap-4 border-r bg-white shadow-sm ${className}`}
+    >
+      {/* --- FIN DE LA CORRECCIÓN --- */}
+
       {/* Logo */}
       <div className="px-5 py-3 border-b">
         <div className="flex items-center justify-center">
@@ -48,6 +60,7 @@ export default function Sidebar() {
         <SidebarLink label="Inicio" to="/" icon={InicioIcon} />
         <SidebarLink label="Inventario" to="/Inventario" icon={ListaIcon} />
         <SidebarLink label="Ventas" to="/Ventas" icon={VentaIcon} />
+        <SidebarLink label="Estadisticas" to="/Estadisticas" icon={Estadisticas} />
         <div className="h-px my-3 bg-neutral-200" />
         <SidebarLink label="Factura" to="/Facturas" icon={FacturaIcon} />
         <SidebarLink label="Crédito Fiscal" to="/CreditoFiscal" icon={CreditoIcon} />

@@ -255,3 +255,29 @@ export async function createCreditoFiscal(payload) {
     throw new Error(msg)
   }
 }
+
+// --------- Estadísticas ---------
+export async function getTopProducts() {
+  try {
+    const { data } = await api.get('/api/stats/top-products')
+    return data // Devuelve el array de productos top
+  } catch (e) {
+    console.error('API Error getTopProducts:', e.response?.data || e)
+    const msg = e.response?.data?.error || e.message || 'Error cargando estadísticas'
+    throw new Error(msg)
+  }
+}
+
+export async function getGraphData(params) {
+  // params = { observe, measure, timeframe, productId }
+  try {
+    // URLSearchParams limpia los parámetros indefinidos
+    const query = new URLSearchParams(params).toString()
+    const { data } = await api.get(`/api/stats/timeseries?${query}`)
+    return data // Devuelve el array de datos para el gráfico
+  } catch (e) {
+    console.error('API Error getGraphData:', e.response?.data || e)
+    const msg = e.response?.data?.error || e.message || 'Error cargando datos del gráfico'
+    throw new Error(msg)
+  }
+}

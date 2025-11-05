@@ -4,6 +4,7 @@ import InventoryPreview from '../dashboard/InvetoryPreview.jsx'
 import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
 import CreateCreditoFiscalModal from '../Modales/CreateCreditoFiscalModal.jsx'
 import { fetchProducts, listInvoices, listFiscalCredits } from '../../api' // <-- IMPORTAMOS LA API
+import TopProducts from './TopProducts.jsx'
 
 export default function Dashboard() {
   const [openCrearFactura, setOpenCrearFactura] = useState(false)
@@ -73,6 +74,8 @@ export default function Dashboard() {
             onCredito={() => setOpenCrearCredito(true)}
           />
         </div>
+
+        <TopProducts />
 
         {/* Vista previa de inventario (ahora con datos reales) */}
         <InventoryPreview items={inventory} />

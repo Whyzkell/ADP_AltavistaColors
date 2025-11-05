@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { fetchProducts, createProduct, updateProduct, deleteProduct } from '../../api'
+import TopProducts from './TopProducts.jsx'
 
 /* ========= Helpers ========= */
 const mapRow = (r) => ({
@@ -228,7 +229,7 @@ export default function Iventario() {
             Agregar producto
           </button>
         </div>
-
+        <TopProducts />
         <div className="mt-6 bg-white rounded-xl ring-1 ring-neutral-200 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left text-neutral-600">

@@ -14,10 +14,11 @@ import Login from './login'
 
 // --- Páginas de contenido (las que van dentro del layout) ---
 import Dashboard from './components/Paginas/Dashboard.jsx'
-import Inventario from './components/Paginas/Iventario.jsx' // Asumo que es 'Inventario' (con N)
+import Inventario from './components/Paginas/Iventario.jsx'
 import Ventas from './components/Paginas/Ventas.jsx'
 import Facturas from './components/Paginas/Facturas.jsx'
 import CreditoFiscal from './components/Paginas/CreditoFiscal.jsx'
+import Estadisticas from './components/Paginas/Estadisticas.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/Ventas" element={<Ventas />} />
               <Route path="/Facturas" element={<Facturas />} />
               <Route path="/CreditoFiscal" element={<CreditoFiscal />} />
+              <Route path="/Estadisticas" element={<Estadisticas />} />
             </Route>
           </Route>
 
