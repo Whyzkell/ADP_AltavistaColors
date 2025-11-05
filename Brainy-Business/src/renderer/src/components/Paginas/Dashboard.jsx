@@ -1,52 +1,58 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import ControlPanel from '../dashboard/ControlPanel.jsx'
 import InventoryPreview from '../dashboard/InvetoryPreview.jsx'
 import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
 import CreateCreditoFiscalModal from '../Modales/CreateCreditoFiscalModal.jsx'
+import { fetchProducts, listInvoices, listFiscalCredits } from '../../api' // <-- IMPORTAMOS LA API
 
 export default function Dashboard() {
   const [openCrearFactura, setOpenCrearFactura] = useState(false)
   const [openCrearCredito, setOpenCrearCredito] = useState(false)
 
-  const [facturas, setFacturas] = useState([])
-  const [creditos, setCreditos] = useState([])
+  // Estados para los datos reales
+  const [inventory, setInventory] = useState([])
+  const [sales, setSales] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const previewInventory = [
-    {
-      id: '#10001',
-      nombre: 'Pintura Blanca',
-      categoria: 'Pinturas',
-      precio: '$10',
-      codigo: '3000',
-      stock: 20
-    },
-    {
-      id: '#10002',
-      nombre: 'Brocha',
-      categoria: 'Herramientas',
-      precio: '$5',
-      codigo: '5002',
-      stock: 15
-    },
-    {
-      id: '#10003',
-      nombre: 'Rodillo',
-      categoria: 'Herramientas',
-      precio: '$7',
-      codigo: '5003',
-      stock: 8
+  // Función para cargar TODOS los datos del dashboard
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      const [products, invoices, credits] = await Promise.all([
+        fetchProducts(),
+        listInvoices(),
+        listFiscalCredits()
+      ])
+
+      setInventory(products || [])
+
+      // Unimos facturas y créditos en una sola lista de "ventas"
+      const allSales = [
+        ...(invoices.map((f) => ({ ...f, tipo: 'Factura' })) || []),
+        ...(credits.map((c) => ({ ...c, tipo: 'Crédito Fiscal' })) || [])
+      ]
+      setSales(allSales)
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+      alert('No se pudo cargar el dashboard. Revisa la conexión con la API.')
+    } finally {
+      setLoading(false)
     }
-  ]
-
-  const handleCreateFactura = (factura) => {
-    setFacturas((arr) => [factura, ...arr])
-    console.log('Factura creada:', factura)
   }
 
-  const handleCreateCredito = (credito) => {
-    setCreditos((arr) => [credito, ...arr])
-    console.log('Crédito Fiscal creado:', credito)
-  }
+  // Cargar los datos al montar el componente
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  // Calcular estadísticas de ventas usando useMemo
+  const salesStats = useMemo(() => {
+    const totalAmount = sales.reduce((acc, venta) => acc + Number(venta.total || 0), 0)
+    return {
+      salesCount: sales.length,
+      salesTotal: totalAmount
+    }
+  }, [sales])
 
   return (
     <main className="flex-1 min-w-0">
@@ -58,29 +64,37 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Panel de acciones */}
+        {/* Panel de acciones (ahora con datos reales) */}
         <div className="mt-4">
           <ControlPanel
+            salesCount={salesStats.salesCount}
+            salesTotal={salesStats.salesTotal}
             onCobrar={() => setOpenCrearFactura(true)}
             onCredito={() => setOpenCrearCredito(true)}
           />
         </div>
 
-        {/* Vista previa de inventario */}
-        <InventoryPreview items={previewInventory} />
+        {/* Vista previa de inventario (ahora con datos reales) */}
+        <InventoryPreview items={inventory} />
       </div>
 
-      {/* Modales */}
+      {/* Modales (ahora recargan los datos al cerrarse) */}
       <CreateInvoiceModal
         open={openCrearFactura}
-        onClose={() => setOpenCrearFactura(false)}
-        onCreate={handleCreateFactura}
+        onClose={() => {
+          setOpenCrearFactura(false)
+          fetchData() // Recarga todo el dashboard
+        }}
+        // 'onCreate' ya no es necesario
       />
 
       <CreateCreditoFiscalModal
         open={openCrearCredito}
-        onClose={() => setOpenCrearCredito(false)}
-        onCreate={handleCreateCredito}
+        onClose={() => {
+          setOpenCrearCredito(false)
+          fetchData() // Recarga todo el dashboard
+        }}
+        // 'onCreate' ya no es necesario
       />
     </main>
   )

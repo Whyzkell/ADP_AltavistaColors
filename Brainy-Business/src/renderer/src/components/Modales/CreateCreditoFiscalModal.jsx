@@ -1,5 +1,6 @@
-// src/Modales/CreateCreditoFiscalModal.jsx
-import React, { useMemo, useState } from 'react'
+// src/renderer/src/components/Modales/CreateCreditoFiscalModal.jsx
+import React, { useEffect, useMemo, useState } from 'react'
+import { fetchProducts, createCreditoFiscal } from '../../api'
 
 /* ---------- Modal genérico ---------- */
 function Modal({ open, title, children, onClose }) {
@@ -12,7 +13,6 @@ function Modal({ open, title, children, onClose }) {
           <div className="p-6 sm:p-8">
             <h3 className="text-2xl font-bold text-black">Crear Crédito Fiscal</h3>
             <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
-            {/* Contenedor con alto máximo + scroll vertical */}
             <div className="mt-6 max-h-[70vh] overflow-y-auto pr-1">{children}</div>
           </div>
         </div>
@@ -39,11 +39,13 @@ const Input = ({ className = '', ...props }) => (
   />
 )
 
+const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0 }
+
 /* =======================================================
-   Modal COMPLETO de Crédito Fiscal (según diseño)
-   ======================================================= */
+    Modal COMPLETO de Crédito Fiscal
+    ======================================================= */
 export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
-  /* ------- Datos generales ------- */
+  /* ------- Datos generales (keys que entiende el backend) ------- */
   const [f, setF] = useState({
     cliente: '',
     direccion: '',
@@ -51,123 +53,221 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
     nrc: '',
     departamento: '',
     nit: '',
-    condiciones: '',
-    notaAnterior: '',
-    ventaCuentaDe: '',
-    fechaNotaAnterior: '',
+    condiciones: '', // -> condiciones_op (lo mapea el backend)
+    notaAnterior: '', // -> nota_remision_ant
+    ventaCuentaDe: '', // -> venta_cuenta_de
+    fechaNotaAnterior: '', // -> fecha_remision_ant (YYYY-MM-DD recomendado)
     entregadoPor: '',
     recibidoPor: '',
     duiEntregado: '',
     duiRecibido: ''
   })
+  const up = (k, v) => setF((s) => ({ ...s, [k]: v }))
 
-  const onChange = (e) => {
-    const { id, value } = e.target
-    setF((s) => ({ ...s, [id]: value }))
-  }
+  /* ------- Productos estilo factura ------- */
+  const [prods, setProds] = useState([{ ...emptyProd }])
 
-  /* ------- Productos ------- */
-  const [line, setLine] = useState({ cantidad: '', nombre: '', precioUnitario: '' })
-  const [productos, setProductos] = useState([])
+  const setProd = (i, k, v) =>
+    setProds((arr) =>
+      arr.map((p, idx) =>
+        idx === i
+          ? {
+              ...p,
+              [k]: k === 'nombre' ? v : Number.isNaN(Number(v)) ? 0 : Number(v)
+            }
+          : p
+      )
+    )
 
-  const onChangeLine = (e) => {
-    const { id, value } = e.target
-    setLine((s) => ({ ...s, [id]: value }))
-  }
+  const addEmptyRow = () => setProds((p) => [...p, { ...emptyProd }])
+  const removeRow = (i) => setProds((arr) => arr.filter((_, idx) => idx !== i))
+  const totalFila = (p) => Number(p.cant || 0) * Number(p.precio || 0)
 
-  const addProducto = () => {
-    const cantidad = Number(line.cantidad)
-    const precioUnitario = Number(line.precioUnitario)
-    if (!line.nombre.trim()) return alert('Ingresa el nombre del producto')
-    if (!Number.isFinite(cantidad) || cantidad <= 0) return alert('Cantidad inválida')
-    if (!Number.isFinite(precioUnitario) || precioUnitario < 0)
-      return alert('Precio unitario inválido')
+  // Solo filas válidas (nombre no vacío, cant>0, precio>=0)
+  const validProds = useMemo(
+    () => prods.filter((p) => p?.nombre?.trim() && Number(p.cant) > 0 && Number(p.precio) >= 0),
+    [prods]
+  )
 
-    const total = +(cantidad * precioUnitario).toFixed(2)
-    setProductos((arr) => [...arr, { cantidad, nombre: line.nombre.trim(), precioUnitario, total }])
-    setLine({ cantidad: '', nombre: '', precioUnitario: '' })
+  /* ------- Buscador de productos con sugerencias ------- */
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [results, setResults] = useState([])
+
+  useEffect(() => {
+    let alive = true
+    const text = q.trim()
+    if (text.length < 2) {
+      setResults([])
+      return
+    }
+    const t = setTimeout(async () => {
+      try {
+        setBusy(true)
+        const rows = await fetchProducts(text)
+        const needle = text.toLowerCase()
+        const mapped = (rows || [])
+          .filter((r) => {
+            const nombre = (r.nombre ?? '').toLowerCase()
+            const cat = (r.categoria ?? '').toLowerCase()
+            const codigo = String(r.codigo ?? '')
+            return nombre.includes(needle) || cat.includes(needle) || codigo.includes(text)
+          })
+          .map((r) => ({
+            pid: r.id ?? r.id_producto,
+            nombre: r.nombre,
+            precio: Number(r.precio ?? r.precio_unit ?? 0),
+            codigo: r.codigo,
+            categoria: r.categoria
+          }))
+        if (alive) setResults(mapped.slice(0, 50))
+      } catch (e) {
+        console.error('fetchProducts(q) error:', e)
+        if (alive) setResults([])
+      } finally {
+        if (alive) setBusy(false)
+      }
+    }, 250)
+    return () => {
+      alive = false
+      clearTimeout(t)
+    }
+  }, [q])
+
+  const addFromSearch = (item) => {
+    setProds((arr) => {
+      const idx = arr.findIndex((p) => p.pid && p.pid === item.pid)
+      if (idx !== -1) {
+        const copy = [...arr]
+        copy[idx] = { ...copy[idx], cant: Number(copy[idx].cant || 0) + 1 }
+        return copy
+      }
+      return [
+        ...arr,
+        { pid: item.pid, cant: 1, nombre: item.nombre, precio: Number(item.precio || 0) }
+      ]
+    })
+    setQ('')
+    setResults([])
   }
 
   /* ------- Resumen (cálculos) ------- */
-  const subTotal = useMemo(() => productos.reduce((acc, p) => acc + p.total, 0), [productos])
-  const iva13 = useMemo(() => +(subTotal * 0.13).toFixed(2), [subTotal])
-
-  // Deja IVA retenido editable (algunos casos es 1% si aplica). Por defecto 0.
+  const sumas = useMemo(() => validProds.reduce((a, b) => a + totalFila(b), 0), [validProds])
+  const iva13 = useMemo(() => +(sumas * 0.13).toFixed(2), [sumas])
   const [ivaRetenido, setIvaRetenido] = useState(0)
   const ventaTotal = useMemo(
-    () => +(subTotal + iva13 - Number(ivaRetenido || 0)).toFixed(2),
-    [subTotal, iva13, ivaRetenido]
+    () => +(sumas + iva13 - Number(ivaRetenido || 0)).toFixed(2),
+    [sumas, iva13, ivaRetenido]
   )
 
-  const submit = (e) => {
+  /* ------- Submit (normaliza y envía) ------- */
+  const [submitting, setSubmitting] = useState(false)
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!f.cliente.trim()) return alert('Ingresa el cliente')
     if (!f.nit.trim()) return alert('Ingresa el NIT')
-    if (productos.length === 0) return alert('Agrega al menos un producto')
+
+    // normaliza productos para el backend
+    const productos = validProds.map((p) => ({
+      pid: p.pid ?? null,
+      nombre: p.nombre.trim(),
+      cant: Number(p.cant || 0),
+      precio: Number(p.precio || 0)
+    }))
+
+    if (productos.length === 0 || sumas <= 0) {
+      return alert('Agrega al menos 1 producto válido')
+    }
 
     const payload = {
       ...f,
       productos,
       resumen: {
-        sumas: +subTotal.toFixed(2),
+        sumas: +sumas.toFixed(2),
         iva13,
-        subTotal: +subTotal.toFixed(2),
+        subTotal: +sumas.toFixed(2),
         ivaRetenido: Number(ivaRetenido || 0),
         ventaTotal
-      },
-      creadoEn: new Date().toISOString()
+      }
     }
 
-    onCreate?.(payload)
-    onClose?.()
-    // reset
-    setF({
-      cliente: '',
-      direccion: '',
-      municipio: '',
-      nrc: '',
-      departamento: '',
-      nit: '',
-      condiciones: '',
-      notaAnterior: '',
-      ventaCuentaDe: '',
-      fechaNotaAnterior: '',
-      entregadoPor: '',
-      recibidoPor: '',
-      duiEntregado: '',
-      duiRecibido: ''
-    })
-    setProductos([])
-    setLine({ cantidad: '', nombre: '', precioUnitario: '' })
-    setIvaRetenido(0)
+    try {
+      setSubmitting(true)
+      // 1. LLAMA A LA API Y CREA EL CRÉDITO
+      await createCreditoFiscal(payload) // -> { id, numero, total }
+
+      // 2. YA NO LLAMA A 'onCreate'. ESTA LÍNEA SE ELIMINA.
+      // onCreate?.(saved)
+
+      // 3. RESETEA LA UI DEL MODAL
+      setF({
+        cliente: '',
+        direccion: '',
+        municipio: '',
+        nrc: '',
+        departamento: '',
+        nit: '',
+        condiciones: '',
+        notaAnterior: '',
+        ventaCuentaDe: '',
+        fechaNotaAnterior: '',
+        entregadoPor: '',
+        recibidoPor: '',
+        duiEntregado: '',
+        duiRecibido: ''
+      })
+      setProds([{ ...emptyProd }])
+      setQ('')
+      setResults([])
+      setIvaRetenido(0)
+
+      // 4. CIERRA EL MODAL
+      onClose?.()
+    } catch (e) {
+      console.error(e)
+      alert(e.message || 'Error creando crédito fiscal')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
     <Modal open={open} onClose={onClose} title="Crear Crédito Fiscal">
-      <form onSubmit={submit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* ====== Fila 1 ====== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Cliente">
             <Input
-              id="cliente"
               value={f.cliente}
-              onChange={onChange}
+              onChange={(e) => up('cliente', e.target.value)}
               placeholder="Cliente a facturar"
               required
             />
           </Field>
           <Field label="Dirección">
-            <Input id="direccion" value={f.direccion} onChange={onChange} placeholder="Dirección" />
+            <Input
+              value={f.direccion}
+              onChange={(e) => up('direccion', e.target.value)}
+              placeholder="Dirección"
+            />
           </Field>
         </div>
 
         {/* ====== Fila 2 ====== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Municipio">
-            <Input id="municipio" value={f.municipio} onChange={onChange} placeholder="Municipio" />
+            <Input
+              value={f.municipio}
+              onChange={(e) => up('municipio', e.target.value)}
+              placeholder="Municipio"
+            />
           </Field>
           <Field label="NRC">
-            <Input id="nrc" value={f.nrc} onChange={onChange} placeholder="XXXXXXXX- X" />
+            <Input
+              value={f.nrc}
+              onChange={(e) => up('nrc', e.target.value)}
+              placeholder="XXXXXXXX-X"
+            />
           </Field>
         </div>
 
@@ -175,14 +275,18 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Departamento">
             <Input
-              id="departamento"
               value={f.departamento}
-              onChange={onChange}
+              onChange={(e) => up('departamento', e.target.value)}
               placeholder="Departamento"
             />
           </Field>
           <Field label="NIT">
-            <Input id="nit" value={f.nit} onChange={onChange} placeholder="XXXXXXXX- X" required />
+            <Input
+              value={f.nit}
+              onChange={(e) => up('nit', e.target.value)}
+              placeholder="XXXXXXXX-X"
+              required
+            />
           </Field>
         </div>
 
@@ -190,17 +294,15 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Condiciones de operación">
             <Input
-              id="condiciones"
               value={f.condiciones}
-              onChange={onChange}
+              onChange={(e) => up('condiciones', e.target.value)}
               placeholder="Condiciones de operación"
             />
           </Field>
           <Field label="No. Nota Remisión anterior">
             <Input
-              id="notaAnterior"
               value={f.notaAnterior}
-              onChange={onChange}
+              onChange={(e) => up('notaAnterior', e.target.value)}
               placeholder="Número de nota de remisión anterior"
             />
           </Field>
@@ -210,18 +312,16 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Venta a cuenta de">
             <Input
-              id="ventaCuentaDe"
               value={f.ventaCuentaDe}
-              onChange={onChange}
+              onChange={(e) => up('ventaCuentaDe', e.target.value)}
               placeholder="Venta a cuenta de"
             />
           </Field>
           <Field label="Fecha Nota Remisión anterior">
             <Input
-              id="fechaNotaAnterior"
               value={f.fechaNotaAnterior}
-              onChange={onChange}
-              placeholder="DD/MM/AAAA"
+              onChange={(e) => up('fechaNotaAnterior', e.target.value)}
+              placeholder="YYYY-MM-DD"
             />
           </Field>
         </div>
@@ -229,81 +329,106 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         {/* ====== Productos ====== */}
         <div>
           <p className="text-sm font-semibold text-black">Productos</p>
-          <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1">
-              <Input placeholder="Buscar" />
+
+          {/* Buscador con sugerencias */}
+          <div className="relative mt-2">
+            <div className="flex items-center gap-2">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Buscar producto por nombre / categoría / código"
+              />
+              <button
+                type="button"
+                className="h-11 w-11 rounded-xl ring-1 ring-neutral-300 grid place-items-center hover:bg-neutral-50"
+              >
+                {busy ? '…' : '🔍'}
+              </button>
             </div>
-            <button
-              type="button"
-              className="h-11 w-11 rounded-xl ring-1 ring-neutral-300 grid place-items-center hover:bg-neutral-50"
-              title="Buscar"
-            >
-              🔍
-            </button>
+            {results.length > 0 && (
+              <div className="absolute z-10 mt-2 w-full max-h-56 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-lg">
+                {results.map((r) => (
+                  <button
+                    key={r.pid}
+                    type="button"
+                    onClick={() => addFromSearch(r)}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between"
+                  >
+                    <span className="truncate">
+                      <span className="font-medium">{r.nombre}</span>
+                      {r.categoria ? (
+                        <span className="text-neutral-400"> • {r.categoria}</span>
+                      ) : null}
+                      {r.codigo ? <span className="text-neutral-400"> • {r.codigo}</span> : null}
+                    </span>
+                    <span className="ml-3 text-neutral-700">${Number(r.precio).toFixed(2)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Fila de entrada */}
-          <div className="mt-3 grid grid-cols-12 gap-3">
-            <div className="col-span-2">
-              <Input
-                id="cantidad"
-                value={line.cantidad}
-                onChange={onChangeLine}
-                placeholder="Cant."
-              />
-            </div>
-            <div className="col-span-5">
-              <Input id="nombre" value={line.nombre} onChange={onChangeLine} placeholder="Nombre" />
-            </div>
-            <div className="col-span-2">
-              <Input
-                id="precioUnitario"
-                value={line.precioUnitario}
-                onChange={onChangeLine}
-                placeholder="$0.00"
-              />
-            </div>
-            <div className="col-span-3">
-              <Input
-                value={Number(line.cantidad || 0) * Number(line.precioUnitario || 0) || 0}
-                readOnly
-              />
-            </div>
+          {/* Encabezados */}
+          <div className="grid grid-cols-12 gap-3 text-sm text-neutral-600 mt-4">
+            <div className="col-span-2">Cantidad</div>
+            <div className="col-span-6">Nombre</div>
+            <div className="col-span-2">Precio unitario</div>
+            <div className="col-span-1">Total</div>
+            <div className="col-span-1 text-right">Acc.</div>
+          </div>
+
+          {/* Filas de productos */}
+          <div className="mt-2 space-y-3">
+            {prods.map((p, i) => (
+              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={p.cant}
+                  onChange={(e) => setProd(i, 'cant', e.target.value)}
+                  placeholder="Cant."
+                  className="col-span-2"
+                />
+                <Input
+                  value={p.nombre}
+                  onChange={(e) => setProd(i, 'nombre', e.target.value)}
+                  placeholder="Producto"
+                  className="col-span-6"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={p.precio}
+                  onChange={(e) => setProd(i, 'precio', e.target.value)}
+                  placeholder="$0.00"
+                  className="col-span-2"
+                />
+                <Input
+                  readOnly
+                  value={`$${(totalFila(p) || 0).toFixed(2)}`}
+                  className="col-span-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeRow(i)}
+                  className="col-span-1 text-rose-600 hover:text-rose-700 text-right"
+                  title="Eliminar fila"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
 
           <button
             type="button"
-            onClick={addProducto}
+            onClick={addEmptyRow}
             className="mt-4 w-full h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-indigo-400 via-fuchsia-500 to-pink-500"
           >
             Agregar Producto
           </button>
-
-          {/* Tabla simple de productos agregados */}
-          {productos.length > 0 && (
-            <div className="mt-4 bg-white ring-1 ring-neutral-200 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-50 text-left text-neutral-600">
-                  <tr>
-                    <th className="px-4 py-2">Cant.</th>
-                    <th className="px-4 py-2">Nombre</th>
-                    <th className="px-4 py-2">Precio unitario</th>
-                    <th className="px-4 py-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-200">
-                  {productos.map((p, i) => (
-                    <tr key={i}>
-                      <td className="px-4 py-2">{p.cantidad}</td>
-                      <td className="px-4 py-2">{p.nombre}</td>
-                      <td className="px-4 py-2">${p.precioUnitario}</td>
-                      <td className="px-4 py-2">${p.total}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
 
         {/* ====== Resumen ====== */}
@@ -313,13 +438,13 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-4">
             <Field label="Sumas">
-              <Input value={subTotal.toFixed(2)} readOnly />
+              <Input value={sumas.toFixed(2)} readOnly />
             </Field>
             <Field label="13% IVA">
               <Input value={iva13.toFixed(2)} readOnly />
             </Field>
             <Field label="Sub- Total">
-              <Input value={subTotal.toFixed(2)} readOnly />
+              <Input value={sumas.toFixed(2)} readOnly />
             </Field>
             <Field label="(-) IVA Retenido">
               <Input
@@ -346,36 +471,32 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
           <div className="space-y-4">
             <Field label="Entregado por">
               <Input
-                id="entregadoPor"
                 value={f.entregadoPor}
-                onChange={onChange}
+                onChange={(e) => up('entregadoPor', e.target.value)}
                 placeholder="Nombre de la persona que entrega"
               />
             </Field>
             <Field label="DUI o NIT">
               <Input
-                id="duiEntregado"
                 value={f.duiEntregado}
-                onChange={onChange}
-                placeholder="XXXXXXXX- X"
+                onChange={(e) => up('duiEntregado', e.target.value)}
+                placeholder="XXXXXXXX-X"
               />
             </Field>
           </div>
           <div className="space-y-4">
             <Field label="Recibido por">
               <Input
-                id="recibidoPor"
                 value={f.recibidoPor}
-                onChange={onChange}
+                onChange={(e) => up('recibidoPor', e.target.value)}
                 placeholder="Nombre de la persona que recibe"
               />
             </Field>
             <Field label="DUI o NIT">
               <Input
-                id="duiRecibido"
                 value={f.duiRecibido}
-                onChange={onChange}
-                placeholder="XXXXXXXX- X"
+                onChange={(e) => up('duiRecibido', e.target.value)}
+                placeholder="XXXXXXXX-X"
               />
             </Field>
           </div>
@@ -385,9 +506,10 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
           <button
             type="submit"
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600"
+            disabled={submitting}
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600 disabled:opacity-60"
           >
-            Crear
+            {submitting ? 'Creando…' : 'Crear'}
           </button>
           <button
             type="button"

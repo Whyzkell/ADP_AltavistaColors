@@ -26,6 +26,8 @@ app.use("/api/products", productsRoutes);
 const invoicesRoutes = require("./routes/invoices.routes");
 app.use("/api", invoicesRoutes);
 
+app.use("/api", require("./routes/creditos.routes"));
+
 // Middleware de errores JSON
 app.use((err, _req, res, _next) => {
   console.error("[unhandled]", err);

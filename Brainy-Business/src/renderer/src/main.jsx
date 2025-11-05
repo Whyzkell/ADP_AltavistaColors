@@ -2,37 +2,48 @@
 import '../src/tailwind/index.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import VentasPage from './VentasPage'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import { AuthProvider } from '../AuthContext' // 👈 ajusta esta ruta a donde tengas el archivo real
+import { AuthProvider } from '../AuthContext'
 
-import App from './App'
+// --- Nuestros nuevos componentes ---
+import AppLayout from './AppLayout'
+import ProtectedRoute from './ProtectedRoute'
 
+// --- Página pública ---
 import Login from './login'
 
-import IventarioPage from './IventarioPage'
-
-import FacturasPage from './FacturasPage'
-
-import CreditoFiscalPage from './CreditoFiscalPage'
+// --- Páginas de contenido (las que van dentro del layout) ---
+import Dashboard from './components/Paginas/Dashboard.jsx'
+import Inventario from './components/Paginas/Iventario.jsx' // Asumo que es 'Inventario' (con N)
+import Ventas from './components/Paginas/Ventas.jsx'
+import Facturas from './components/Paginas/Facturas.jsx'
+import CreditoFiscal from './components/Paginas/CreditoFiscal.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/app" element={<App />} />
-
+          {/* --- RUTA PÚBLICA --- */}
+          {/* El login no está protegido */}
           <Route path="/login" element={<Login />} />
 
-          <Route path="/Inventario" element={<IventarioPage />} />
+          {/* --- RUTAS PROTEGIDAS --- */}
+          {/* Todo lo que esté aquí adentro usará ProtectedRoute */}
+          <Route element={<ProtectedRoute />}>
+            {/* Todo lo que esté aquí adentro usará AppLayout */}
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/app" element={<Dashboard />} />
+              <Route path="/Inventario" element={<Inventario />} />
+              <Route path="/Ventas" element={<Ventas />} />
+              <Route path="/Facturas" element={<Facturas />} />
+              <Route path="/CreditoFiscal" element={<CreditoFiscal />} />
+            </Route>
+          </Route>
 
-          <Route path="/Ventas" element={<VentasPage />} />
-
-          <Route path="/Facturas" element={<FacturasPage />} />
-
-          <Route path="/CreditoFiscal" element={<CreditoFiscalPage />} />
+          {/* Opcional: Redirige cualquier otra ruta al inicio */}
+          {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
         </Routes>
       </Router>
     </AuthProvider>

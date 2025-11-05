@@ -26,10 +26,12 @@ export default function InventoryPreview({ items = [] }) {
       </div>
 
       <div className="mt-3 space-y-3">
+        {/* Usamos 'slice' para mostrar solo los primeros 6 items */}
         {items.slice(0, 6).map((r, i) => (
-          <Card key={i} className="px-4 py-3">
+          <Card key={r.id || i} className="px-4 py-3">
             <div className="grid grid-cols-2 lg:grid-cols-12 items-center gap-3">
               <div className="col-span-1 lg:col-span-2 text-sm font-mono text-neutral-700">
+                {/* Mostramos el ID real de la API */}
                 {r.id}
               </div>
               <div className="col-span-1 lg:col-span-2 text-sm text-neutral-900">{r.nombre}</div>
@@ -37,17 +39,21 @@ export default function InventoryPreview({ items = [] }) {
                 {r.categoria}
               </div>
               <div className="hidden lg:block lg:col-span-2 text-sm text-neutral-900">
-                {r.precio}
+                {/* Formateamos el precio */}${Number(r.precio || 0).toFixed(2)}
               </div>
               <div className="hidden lg:block lg:col-span-2 text-sm text-neutral-600">
                 {r.codigo}
               </div>
               <div className="col-span-1 lg:col-span-2">
-                <Pill intent={r.stock <= 8 ? 'warn' : 'success'}>{r.stock}</Pill>
+                {/* Usamos 'existencias' de la API en lugar de 'stock' */}
+                <Pill intent={r.existencias <= 8 ? 'warn' : 'success'}>{r.existencias}</Pill>
               </div>
             </div>
           </Card>
         ))}
+        {items.length === 0 && (
+          <Card className="px-4 py-4 text-center text-neutral-500">Cargando inventario...</Card>
+        )}
       </div>
     </div>
   )

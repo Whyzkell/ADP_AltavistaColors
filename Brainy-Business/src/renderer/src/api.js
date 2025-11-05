@@ -140,3 +140,118 @@ export async function deleteInvoice(id) {
   const { data } = await api.delete(`/api/invoices/${id}`)
   return data
 }
+
+// --------- Créditos Fiscales ---------
+export async function listFiscalCredits() {
+  const { data } = await api.get('/api/creditos')
+  return data
+}
+
+export async function getFiscalCredit(id) {
+  const { data } = await api.get(`/api/creditos/${id}`)
+  return data
+}
+
+export async function deleteFiscalCredit(id) {
+  const { data } = await api.delete(`/api/creditos/${id}`)
+  return data
+}
+
+export async function createFiscalCredit(payload) {
+  // payload.sale de CreateCreditoFiscalModal
+  const items = (payload.productos || []).map((p) => ({
+    producto_id: p.pid ?? p.producto_id ?? null,
+    nombre: p.nombre,
+    cantidad: Number(p.cantidad ?? p.cant ?? 0),
+    precio: Number(p.precioUnitario ?? p.precio ?? 0)
+  }))
+
+  const body = {
+    cliente: payload.cliente,
+    direccion: payload.direccion,
+    municipio: payload.municipio,
+    departamento: payload.departamento,
+    nrc: payload.nrc,
+    nit: payload.nit,
+    condiciones: payload.condiciones,
+    items,
+    // guardo TODO lo demás en meta/payload (para ver-detalle o imprimir)
+    meta: {
+      ventaCuentaDe: payload.ventaCuentaDe,
+      notaAnterior: payload.notaAnterior,
+      fechaNotaAnterior: payload.fechaNotaAnterior,
+      entregadoPor: payload.entregadoPor,
+      recibidoPor: payload.recibidoPor,
+      duiEntregado: payload.duiEntregado,
+      duiRecibido: payload.duiRecibido,
+      resumen: payload.resumen,
+      creadoEn: payload.creadoEn
+    }
+  }
+
+  const { data } = await api.post('/api/creditos', body)
+  return data // {id, numero, total}
+}
+
+export async function createCreditoFiscal(payload) {
+  // helper para mandar null y no '' a columnas text/date
+  const n = (v) => (v === undefined || v === null || String(v).trim() === '' ? null : v)
+
+  // mapea productos -> credito_items (usa precio_unit como en la tabla)
+  const items = (payload.productos || [])
+    .filter((p) => Number(p.cant) > 0 && Number(p.precio) >= 0)
+    .map((p) => ({
+      producto_id: p.pid ?? null,
+      nombre: String(p.nombre || '').trim(),
+      cantidad: Number(p.cant || 0),
+      precio_unit: Number(p.precio || 0),
+      total: Number((Number(p.cant || 0) * Number(p.precio || 0)).toFixed(2))
+    }))
+
+  const body = {
+    // columnas cabecera (según tu tabla creditos)
+    cliente: n(payload.cliente),
+    direccion: n(payload.direccion),
+    municipio: n(payload.municipio),
+    nrc: n(payload.nrc),
+    departamento: n(payload.departamento),
+    nit: n(payload.nit),
+
+    condiciones_op: n(payload.condiciones),
+    nota_remision_ant: n(payload.notaAnterior),
+    // si viene vacío, va null (no ''), para no romper la columna date
+    fecha_remision_ant: n(payload.fechaNotaAnterior),
+    venta_cuenta_de: n(payload.ventaCuentaDe),
+
+    // totales
+    subtotal: Number(payload?.resumen?.sumas ?? payload?.resumen?.subTotal ?? 0),
+    iva_13: Number(payload?.resumen?.iva13 ?? 0),
+    iva_retenido: Number(payload?.resumen?.ivaRetenido ?? 0),
+    total: Number(payload?.resumen?.ventaTotal ?? 0),
+
+    // detalle
+    items,
+
+    // extra lo metemos en jsonb payload
+    payload: {
+      entregadoPor: n(payload.entregadoPor),
+      recibidoPor: n(payload.recibidoPor),
+      duiEntregado: n(payload.duiEntregado),
+      duiRecibido: n(payload.duiRecibido)
+    }
+  }
+
+  try {
+    const { data } = await api.post('/api/creditos', body)
+    return data // { id, numero, total }
+  } catch (e) {
+    // muestra por consola el error real del backend (si viene)
+    console.error('POST /api/creditos error:', e.response?.data || e)
+    const msg =
+      e.response?.data?.error ||
+      e.response?.data?.message ||
+      e.message ||
+      'Error creando crédito fiscal'
+    throw new Error(msg)
+  }
+}

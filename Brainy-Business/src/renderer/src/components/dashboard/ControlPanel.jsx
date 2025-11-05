@@ -11,7 +11,8 @@ const Stat = ({ label, value }) => (
   </div>
 )
 
-export default function ControlPanel({ onCobrar, onCredito }) {
+// Acepta 'salesCount' y 'salesTotal' como props
+export default function ControlPanel({ onCobrar, onCredito, salesCount = 0, salesTotal = 0 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
@@ -19,15 +20,18 @@ export default function ControlPanel({ onCobrar, onCredito }) {
         <div className="mt-4 flex flex-wrap gap-6">
           <div>
             <p className="text-[11px] uppercase text-neutral-500">Número de ventas</p>
-            <p className="text-lg text-black font-semibold">400</p>
+            {/* Muestra el total de ventas real */}
+            <p className="text-lg text-black font-semibold">{salesCount}</p>
           </div>
           <div>
             <p className="text-[11px] uppercase text-neutral-500">Mes</p>
-            <p className="text-lg text-black font-semibold">Septiembre</p>
+            {/* Puedes cambiar esto por lógica de fecha si quieres */}
+            <p className="text-lg text-black font-semibold">Noviembre</p>
           </div>
           <div>
             <p className="text-[11px] uppercase text-neutral-500">Ventas</p>
-            <p className="text-lg text-black font-semibold">$5698</p>
+            {/* Muestra el monto total real */}
+            <p className="text-lg text-black font-semibold">${Number(salesTotal).toFixed(2)}</p>
           </div>
         </div>
       </div>

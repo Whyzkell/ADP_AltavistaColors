@@ -1,3 +1,4 @@
+// src/renderer/src/components/Modales/VerCreditoFiscalModal.jsx
 import React from 'react'
 
 function Shell({ open, title, onClose, children }) {
@@ -32,35 +33,75 @@ const Field = ({ label, value }) => (
   </div>
 )
 
+function fmtFecha(d) {
+  if (!d) return ''
+  try {
+    // Asume que puede venir como 'YYYY-MM-DD' o un ISO string
+    return new Date(d).toLocaleDateString('es-SV', { timeZone: 'UTC' })
+  } catch {
+    return String(d)
+  }
+}
+
 export default function VerCreditoFiscalModal({ open, onClose, data }) {
-  const p = data?.payload || {}
-  const productos = p.productos || []
-  const sumas = p?.resumen?.subTotal ?? 0
-  const iva13 = p?.resumen?.iva13 ?? (Number(sumas) * 0.13)
-  const ivaRet = p?.resumen?.ivaRetenido ?? 0
-  const ventaTotal = p?.resumen?.ventaTotal ?? data?.monto ?? 0
+  // 'payload' es solo para los campos extra que guardaste en el JSON
+  const payload = data?.payload || {}
+
+  // <-- CORREGIDO: Los productos vienen de 'data.items'
+  const productos = data?.items || []
+
+  // <-- CORREGIDO: Los totales vienen del nivel principal de 'data'
+  const sumas = data?.subtotal ?? 0
+  const iva13 = data?.iva_13 ?? 0
+  const ivaRet = data?.iva_retenido ?? 0
+  const ventaTotal = data?.total ?? 0
 
   return (
-    <Shell open={open} onClose={onClose} title={`Credito Fiscal No. ${data?.id?.replace('#', '') || ''}`}>
+    // <-- CORREGIDO: Usar 'data.numero' para el título
+    <Shell
+      open={open}
+      onClose={onClose}
+      title={`Credito Fiscal No. ${data?.numero || data?.id || ''}`}
+    >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Cliente" value={p.cliente || data?.cliente || ''} />
-        <Field label="Dirección" value={p.direccion || ''} />
+        {/* <-- CORREGIDO: Priorizar 'data.campo' sobre 'payload.campo' */}
+        <Field label="Cliente" value={data?.cliente || payload?.form?.cliente || ''} />
+        <Field label="Dirección" value={data?.direccion || payload?.form?.direccion || ''} />
       </div>
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Municipio" value={p.municipio || ''} />
-        <Field label="NRC" value={p.nrc || ''} />
+        <Field label="Municipio" value={data?.municipio || payload?.form?.municipio || ''} />
+        <Field label="NRC" value={data?.nrc || payload?.form?.nrc || ''} />
       </div>
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Departamento" value={p.departamento || ''} />
-        <Field label="NIT" value={p.nit || ''} />
+        <Field
+          label="Departamento"
+          value={data?.departamento || payload?.form?.departamento || ''}
+        />
+        <Field label="NIT" value={data?.nit || payload?.form?.nit || ''} />
       </div>
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Condiciones de operación" value={p.condiciones || ''} />
-        <Field label="No. Nota Remisión anterior" value={p.notaAnterior || ''} />
+        <Field
+          label="Condiciones de operación"
+          value={data?.condiciones_op || payload?.form?.condiciones || ''}
+        />
+        <Field
+          label="No. Nota Remisión anterior"
+          value={data?.nota_remision_ant || payload?.form?.notaAnterior || ''}
+        />
       </div>
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="Venta a cuenta de" value={p.ventaCuentaDe || ''} />
-        <Field label="Fecha Nota Remisión anterior" value={p.fechaNotaAnterior || ''} />
+        <Field
+          label="Venta a cuenta de"
+          value={data?.venta_cuenta_de || payload?.form?.ventaCuentaDe || ''}
+        />
+        <Field
+          label="Fecha Nota Remisión anterior"
+          value={
+            data?.fecha_remision_ant
+              ? fmtFecha(data.fecha_remision_ant)
+              : payload?.form?.fechaNotaAnterior || ''
+          }
+        />
       </div>
 
       <p className="mt-6 text-sm font-semibold">Productos</p>
@@ -70,21 +111,23 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
         <div className="col-span-2 text-xs text-neutral-500">Precio unitario</div>
         <div className="col-span-3 text-xs text-neutral-500">Total</div>
       </div>
-      {(productos.length ? productos : [{ cantidad: '', nombre: '', precioUnitario: '', total: '' }]).map(
-        (it, i) => (
-          <div key={i} className="mt-2 grid grid-cols-12 gap-3">
-            <Input value={it.cantidad} />
-            <div className="col-span-5">
-              <Input value={it.nombre} />
-            </div>
-            <div className="col-span-2">
-              <Input value={it.precioUnitario} />
-            </div>
-            <div className="col-span-3">
-              <Input value={it.total} />
-            </div>
+      {(productos.length ? productos : []).map((it, i) => (
+        <div key={it.id || i} className="mt-2 grid grid-cols-12 gap-3">
+          {/* <-- CORREGIDO: La API devuelve 'cant', 'precio', 'total' */}
+          <Input value={it.cant} />
+          <div className="col-span-5">
+            <Input value={it.nombre} />
           </div>
-        )
+          <div className="col-span-2">
+            <Input value={it.precio} />
+          </div>
+          <div className="col-span-3">
+            <Input value={it.total} />
+          </div>
+        </div>
+      ))}
+      {productos.length === 0 && (
+        <div className="mt-2 text-center text-neutral-400 text-sm">No se encontraron productos</div>
       )}
 
       <p className="mt-6 text-sm font-semibold">Resumen</p>
@@ -100,18 +143,25 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
         Llenar si la operación es superior a <b>$11,428.58</b>
       </p>
 
+      {/* Estos campos SÍ viven en el payload, así que 'payload' está bien aquí */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
-        <Field label="Entregado por" value={p.entregadoPor || ''} />
-        <Field label="Recibido por" value={p.recibidoPor || ''} />
-        <Field label="DUI o NIT" value={p.duiEntregado || ''} />
-        <Field label="DUI o NIT" value={p.duiRecibido || ''} />
+        <Field label="Entregado por" value={payload?.entregadoPor || ''} />
+        <Field label="Recibido por" value={payload?.recibidoPor || ''} />
+        <Field label="DUI o NIT" value={payload?.duiEntregado || ''} />
+        <Field label="DUI o NIT" value={payload?.duiRecibido || ''} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5">
-        <button onClick={() => window.print()} className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600">
+        <button
+          onClick={() => window.print()}
+          className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600"
+        >
           Imprimir
         </button>
-        <button onClick={onClose} className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500">
+        <button
+          onClick={onClose}
+          className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500"
+        >
           Cancelar
         </button>
       </div>

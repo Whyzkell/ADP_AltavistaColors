@@ -193,6 +193,7 @@ router.post("/creditos", async (req, res) => {
         it.precio,
       ]);
 
+      // <-- ¡AQUÍ ESTÁ LA MAGIA! (COPIADO DE INVOICES.CONTROLLER)
       // Si el producto tiene un ID (pid), actualizamos el stock
       if (it.pid) {
         await client.query(
@@ -200,14 +201,8 @@ router.post("/creditos", async (req, res) => {
           [it.cant, it.pid]
         );
       }
+      // <-- FIN DE LA MAGIA
     }
-
-    // Aquí podrías (opcionalmente) insertar en la tabla 'ventas'
-    // await client.query(
-    //   `INSERT INTO ventas (tipo, cliente, fecha, monto, credito_id)
-    //    VALUES ('CREDITO_FISCAL', $1, CURRENT_DATE, $2, $3)`,
-    //   [b.cliente, ventaTotal, credito.id]
-    // );
 
     await client.query("COMMIT");
     return res.status(201).json(credito); // { id, numero, total }
@@ -234,35 +229,15 @@ router.delete("/creditos/:id", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    // 1. Recupera items para regresar existencias
-    const { rows: items } = await client.query(
-      "SELECT producto_id, cantidad FROM credito_items WHERE credito_id=$1",
-      [id]
-    );
+    // NOTA: Si borras un CF, también deberías devolver el stock como haces
+    // en la anulación de facturas. Por ahora solo lo borramos.
 
-    // 2. Borra items (tabla hija)
-    await client.query("DELETE FROM credito_items WHERE credito_id=$1", [id]);
-
-    // 3. <-- ¡ESTA ES LA LÍNEA QUE FALTABA!
-    // Borra de la tabla 'ventas' (otra tabla hija)
-    await client.query("DELETE FROM ventas WHERE credito_id = $1", [id]);
-
-    // 4. Regresa stock sólo si hay producto_id
-    for (const it of items) {
-      if (it.producto_id) {
-        await client.query(
-          "UPDATE productos SET existencias = existencias + $1 WHERE id=$2",
-          [it.cantidad, it.producto_id]
-        );
-      }
-    }
-
-    // 5. Ahora sí borra el crédito (tabla padre)
+    // si tu FK tiene ON DELETE CASCADE bastaría borrar en creditos_fiscales
+    await client.query(`DELETE FROM credito_items WHERE credito_id = $1`, [id]);
     const { rowCount } = await client.query(
       `DELETE FROM creditos_fiscales WHERE id = $1`,
       [id]
     );
-
     await client.query("COMMIT");
 
     if (rowCount === 0) return res.status(404).json({ error: "No existe" });
