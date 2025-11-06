@@ -43,14 +43,14 @@ export default function ControlPanel({ onCobrar, onCredito, salesCount = 0, sale
             onClick={onCobrar}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
           >
-            <img src={FacturaIcon} className="w-5 h-5" />
+            <img src="resources/Factura.png" className="w-5 h-5" />
             Factura
           </button>
           <button
             onClick={onCredito}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
           >
-            <img src={CreditoIcon} className="w-5 h-5" />
+            <img src="resources/CreditoFiscal.png" className="w-5 h-5" />
             Crédito fiscal
           </button>
         </div>

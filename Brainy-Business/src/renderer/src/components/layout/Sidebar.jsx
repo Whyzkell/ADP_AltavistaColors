@@ -1,14 +1,18 @@
 // src/components/layout/Sidebar.jsx
 import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import InicioIcon from '../../../../../resources/Dashboard.png'
-import ListaIcon from '../../../../../resources/Lista.png'
-import VentaIcon from '../../../../../resources/Venta.png'
-import FacturaIcon from '../../../../../resources/Factura.png'
-import CreditoIcon from '../../../../../resources/CreditoFiscal.png'
-import SalirIcon from '../../../../../resources/Salir.png'
-import SoloLogo from '../../../../../resources/Logo.png'
-import Estadisticas from '../../../../../resources/Chart_Line.png'
+
+// --- INICIO DE LA CORRECCIÓN ---
+// 1. Borramos todos los 'import' de los íconos
+// import InicioIcon from '../../../../../resources/Dashboard.png' (BORRADO)
+// import ListaIcon from '../../../../../resources/Lista.png' (BORRADO)
+// import VentaIcon from '../../../../../resources/Venta.png' (BORRADO)
+// import FacturaIcon from '../../../../../resources/Factura.png' (BORRADO)
+// import CreditoIcon from '../../../../../resources/CreditoFiscal.png' (BORRADO)
+// import SalirIcon from '../../../../../resources/Salir.png' (BORRADO)
+// import SoloLogo from '../../../../../resources/Logo.png' (BORRADO)
+// import Estadisticas from '../../../../../resources/Chart_Line.png' (BORRADO)
+// --- FIN DE LA CORRECCIÓN ---
 
 const SidebarLink = ({ label, to, icon }) => (
   <NavLink
@@ -23,47 +27,41 @@ const SidebarLink = ({ label, to, icon }) => (
   </NavLink>
 )
 
-// --- INICIO DE LA CORRECCIÓN ---
-// 1. Acepta 'className' como prop. Le damos un valor por defecto ''
 export default function Sidebar({ className = '' }) {
-  // --- FIN DE LA CORRECCIÓN ---
-
   const navigate = useNavigate()
 
   const handleLogout = () => {
-    // 🔴 Aquí limpias la sesión
-    localStorage.removeItem('token') // si guardas token
-    localStorage.removeItem('user') // si guardas usuario
-    // Si usas un AuthContext también llamas logout()
-
-    // Redirigir al login
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
     navigate('/login')
   }
 
   return (
-    // --- INICIO DE LA CORRECCIÓN ---
-    // 2. Añade el prop 'className' al final de la lista de clases
     <aside
       className={`hidden md:flex fixed top-0 left-0 h-screen w-64 flex-col gap-4 border-r bg-white shadow-sm ${className}`}
     >
-      {/* --- FIN DE LA CORRECCIÓN --- */}
-
       {/* Logo */}
       <div className="px-5 py-3 border-b">
         <div className="flex items-center justify-center">
-          <img src={SoloLogo} className=" w-[220px] " />
+          {/* 2. Usamos la ruta pública para el logo */}
+          <img src="resources/Logo.png" className=" w-[220px] " />
         </div>
       </div>
 
       {/* Links */}
       <nav className="px-4 flex-1 flex flex-col gap-1">
-        <SidebarLink label="Inicio" to="/" icon={InicioIcon} />
-        <SidebarLink label="Inventario" to="/Inventario" icon={ListaIcon} />
-        <SidebarLink label="Ventas" to="/Ventas" icon={VentaIcon} />
-        <SidebarLink label="Estadisticas" to="/Estadisticas" icon={Estadisticas} />
+        {/* 3. Usamos la ruta pública para cada ícono */}
+        <SidebarLink label="Inicio" to="/" icon="resources/Dashboard.png" />
+        <SidebarLink label="Inventario" to="/Inventario" icon="resources/Lista.png" />
+        <SidebarLink label="Ventas" to="/Ventas" icon="resources/Venta.png" />
+        <SidebarLink label="Estadisticas" to="/Estadisticas" icon="resources/Chart_Line.png" />
         <div className="h-px my-3 bg-neutral-200" />
-        <SidebarLink label="Factura" to="/Facturas" icon={FacturaIcon} />
-        <SidebarLink label="Crédito Fiscal" to="/CreditoFiscal" icon={CreditoIcon} />
+        <SidebarLink label="Factura" to="/Facturas" icon="resources/Factura.png" />
+        <SidebarLink
+          label="Crédito Fiscal"
+          to="/CreditoFiscal"
+          icon="resources/CreditoFiscal.png"
+        />
         <div className="h-px my-3 bg-neutral-200" />
 
         {/* Botón Cerrar Sesión */}
@@ -71,7 +69,8 @@ export default function Sidebar({ className = '' }) {
           onClick={handleLogout}
           className="text-left flex items-center gap-3 px-4 py-2 rounded-xl text-sm text-neutral-700 hover:bg-neutral-50"
         >
-          <img src={SalirIcon} className="w-5 h-5" />
+          {/* 4. Usamos la ruta pública para el ícono de salir */}
+          <img src="resources/Salir.png" className="w-5 h-5" />
           Cerrar Sesión
         </button>
       </nav>

@@ -1,3 +1,4 @@
+// src/routes/products.routes.js
 const express = require("express");
 const router = express.Router();
 const db = require("../db");
@@ -9,6 +10,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 router.use(auth);
 
 // GET /api/products?q=texto
+// (Esta es la única ruta GET / que necesitas, ya que maneja la búsqueda)
 router.get("/", auth, async (req, res) => {
   try {
     const q = (req.query.q || "").trim().toLowerCase();
@@ -40,42 +42,21 @@ router.get("/", auth, async (req, res) => {
       params
     );
 
-    res.json(rows);
+    res.json(rows); // <-- Solo se envía UNA respuesta
   } catch (err) {
     console.error("GET /api/products error:", err);
     res.status(500).json({ error: "Error interno" });
   }
 });
 
-// GET /api/products
-router.get("/", async (req, res, next) => {
-  try {
-    const { rows } = await db.query(`
-  SELECT id,
-         nombre,
-         categoria,
-         precio_unit AS precio,
-         codigo,
-         existencias
-  FROM productos
-  ORDER BY id DESC
-`);
-    res.json(rows);
-    res.json(rows);
-  } catch (err) {
-    next(err);
-  }
-});
+// --- CORRECCIÓN ---
+// Se eliminó la ruta duplicada GET "/" que tenías aquí
+// --- FIN DE CORRECCIÓN ---
 
 // POST /api/products
 router.post("/", async (req, res, next) => {
   try {
     const { nombre, categoria, precio, codigo, existencias } = req.body;
-
-    // Tipos seguros (evita 22P02 en PG)
-    const precioN = Number(precio);
-    const codigoN = Number(codigo);
-    const existN = Number(existencias);
 
     const p = Number(precio ?? precio_unit); // acepta cualquiera
     const { rows } = await db.query(
@@ -86,9 +67,12 @@ router.post("/", async (req, res, next) => {
 `,
       [nombre, categoria, p, Number(codigo), Number(existencias)]
     );
-    res.json(rows[0]);
 
-    res.status(201).json(rows[0]);
+    // --- CORRECCIÓN ---
+    // Se elimina la primera respuesta. Solo dejamos la que tiene el código 201.
+    // res.json(rows[0]); // <-- ESTA LÍNEA SE BORRA
+    res.status(201).json(rows[0]); // <-- Esta es la única respuesta
+    // --- FIN DE CORRECCIÓN ---
   } catch (err) {
     next(err);
   }
@@ -116,11 +100,17 @@ RETURNING id, nombre, categoria, precio_unit AS precio, codigo, existencias
         id,
       ]
     );
-    res.json(rows[0]);
 
-    if (!rows[0])
+    // --- CORRECCIÓN ---
+    // Se reordena la lógica.
+    // 1. Primero verificamos si el producto existe.
+    if (!rows[0]) {
       return res.status(404).json({ error: "Producto no encontrado" });
+    }
+
+    // 2. Si existe, enviamos la respuesta (solo una vez).
     res.json(rows[0]);
+    // --- FIN DE CORRECCIÓN ---
   } catch (err) {
     next(err);
   }
@@ -143,7 +133,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Producto no encontrado" });
     }
 
-    return res.json({ ok: true, id: rows[0].id });
+    return res.json({ ok: true, id: rows[0].id }); // <-- Esta ruta estaba bien
   } catch (err) {
     console.error("DELETE /api/products/:id ->", err);
     return res.status(500).json({ error: "Error interno" });

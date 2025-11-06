@@ -2,7 +2,9 @@
 import '../src/tailwind/index.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+// --- INICIO DE LA CORRECCIÓN ---
+import { HashRouter as Router, Routes, Route } from 'react-router-dom'
+// --- FIN DE LA CORRECCIÓN ---
 import { AuthProvider } from '../AuthContext'
 
 // --- Nuestros nuevos componentes ---

@@ -1,24 +1,31 @@
 appId: com.electron.app
-productName: brainy-business
+productName: AltavistaColors
 directories:
   buildResources: build
 files:
+  - 'out'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.MD,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-asarUnpack:
-  - resources/**
+
+# --- INICIO DE LA CORRECCIÓN ---
+# BORRA ESTA SECCIÓN COMPLETA
+# asarUnpack:
+#  - resources/**
+# --- FIN DE LA CORRECCIÓN ---
+
 win:
   icon: build/icon.ico
-  executableName: brainy-business
+  executableName: AltavistaColors
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  icon: build/icon.icns
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
