@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
 import VerFacturaModal from '../Modales/VerFacturaModal.jsx'
 import { listInvoices, getInvoice, deleteInvoice } from '../../api'
-import { createPortal } from 'react-dom'
+import Swal from 'sweetalert2'
 
 /* ---------- UI helpers ---------- */
 const PillMoney = ({ value }) => (
@@ -23,7 +23,6 @@ function fmtFecha(d) {
 
 function mapRow(r) {
   return {
-    // id real (para peticiones) y un id mostrado (numero o id con padding)
     id: r.id,
     numero: r.numero ?? `#${String(r.id).padStart(5, '0')}`,
     cliente: r.cliente,
@@ -33,31 +32,39 @@ function mapRow(r) {
   }
 }
 
+// --- MENÚ CORREGIDO (Igual que en Inventario) ---
+const Menu = ({ onView, onDelete }) => (
+  <div className="absolute right-0 mt-1 w-32 bg-white rounded-xl shadow-lg ring-1 ring-neutral-200 py-2 z-20">
+    <button
+      onClick={onView}
+      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 text-neutral-700"
+    >
+      Ver detalles
+    </button>
+    <div className="h-px bg-neutral-200 mx-2" />
+    <button
+      onClick={onDelete}
+      className="w-full text-left px-3 py-2 text-sm text-rose-600 hover:bg-rose-50"
+    >
+      Eliminar
+    </button>
+  </div>
+)
+
 /* =====================================================
    Página: Facturas
    ===================================================== */
 export default function Facturas() {
   const [query, setQuery] = useState('')
-  const [openMenu, setOpenMenu] = useState(null)
+
+  // Usamos un estado simple para saber qué ID tiene el menú abierto
+  const [openMenuId, setOpenMenuId] = useState(null)
 
   const [openCrear, setOpenCrear] = useState(false)
   const [detalle, setDetalle] = useState(null)
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
-
-  const [menu, setMenu] = useState({ rect: null, row: null })
-
-  // cierra el menú si hay scroll/resize
-  useEffect(() => {
-    const close = () => setMenu({ rect: null, row: null })
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
-    return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
-    }
-  }, [])
 
   // Cargar listado desde backend
   useEffect(() => {
@@ -68,7 +75,12 @@ export default function Facturas() {
         setItems(rows.map(mapRow))
       } catch (e) {
         console.error(e)
-        alert(e.message || 'Error cargando facturas')
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: e.message || 'Error cargando facturas',
+          confirmButtonColor: '#11A5A3'
+        })
       } finally {
         setLoading(false)
       }
@@ -83,16 +95,21 @@ export default function Facturas() {
     )
   }, [items, query])
 
-  // Después de crear una factura en el modal
   const handleCreate = async (saved) => {
-    // CreateFacturaModal te retorna { id, numero, total }
     try {
       const full = await getInvoice(saved.id)
-      const row = mapRow(full)
+      const row = mapRow(full) // <--- Aquí 'row' ya tiene el número bien formateado (#00025)
       setItems((arr) => [row, ...arr])
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Factura creada',
+        // CORRECCIÓN: Usamos row.numero en lugar de saved.numero
+        text: `La factura ${row.numero} se ha guardado correctamente.`,
+        timer: 2000,
+        showConfirmButton: false
+      })
     } catch (e) {
-      // Si por alguna razón falla el fetch del detalle,
-      // al menos agrega una fila básica con lo que tenemos
       setItems((arr) => [
         mapRow({ id: saved.id, numero: saved.numero, cliente: '—', total: saved.total }),
         ...arr
@@ -101,9 +118,11 @@ export default function Facturas() {
   }
 
   const verDetalles = async (row) => {
+    // Cerramos el menú
+    setOpenMenuId(null)
+
     try {
-      const full = await getInvoice(row.id) // trae items y todos los campos
-      // normaliza un poco para el modal
+      const full = await getInvoice(row.id)
       setDetalle({
         ...full,
         numero: full.numero ?? `#${String(full.id).padStart(5, '0')}`,
@@ -112,56 +131,52 @@ export default function Facturas() {
       })
     } catch (e) {
       console.error(e)
-      alert(e.message || 'No se pudo cargar la factura')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'No se pudo cargar la factura',
+        confirmButtonColor: '#11A5A3'
+      })
     }
   }
 
   const eliminar = async (row) => {
-    if (!confirm(`¿Eliminar la factura ${row.numero}?`)) return
+    // Cerramos el menú
+    setOpenMenuId(null)
+
+    const result = await Swal.fire({
+      title: `¿Eliminar factura ${row.numero}?`,
+      text: 'Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E11D48',
+      cancelButtonColor: '#11A5A3',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
+
     try {
       await deleteInvoice(row.id)
       setItems((arr) => arr.filter((x) => x.id !== row.id))
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Eliminada',
+        text: 'La factura ha sido eliminada correctamente.',
+        timer: 1500,
+        showConfirmButton: false
+      })
     } catch (e) {
       console.error(e)
-      alert(e.message || 'No se pudo eliminar la factura')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'No se pudo eliminar la factura',
+        confirmButtonColor: '#11A5A3'
+      })
     }
-  }
-
-  // componente helper (puede ir encima de Facturas)
-  function FloatingMenu({ anchorRect, onView, onDelete, onClose }) {
-    if (!anchorRect) return null
-    if (typeof document === 'undefined') return null // por si acaso
-
-    const WIDTH = 176
-    const top = anchorRect.bottom + window.scrollY + 6
-    let left = anchorRect.right + window.scrollX - WIDTH
-    left = Math.max(8, Math.min(left, window.innerWidth - WIDTH - 8))
-
-    return createPortal(
-      <>
-        {/* backdrop para cerrar al hacer click fuera */}
-        <div className="fixed inset-0 z-40" onClick={onClose} />
-        <div
-          className="fixed z-50 bg-white rounded-xl shadow-lg ring-1 ring-neutral-200 py-2"
-          style={{ top, left, width: WIDTH }}
-        >
-          <button
-            onClick={onView}
-            className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50"
-          >
-            Ver detalles
-          </button>
-          <div className="h-px bg-neutral-200 mx-2" />
-          <button
-            onClick={onDelete}
-            className="w-full text-left px-3 py-2 text-sm text-rose-600 hover:bg-rose-50"
-          >
-            Eliminar
-          </button>
-        </div>
-      </>,
-      document.body
-    )
   }
 
   return (
@@ -192,7 +207,10 @@ export default function Facturas() {
           </button>
         </div>
 
-        <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 mb-8 overflow-x-auto overflow-y-visible">
+        <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 mb-8 overflow-visible">
+          {/* Nota: overflow-visible es importante si el menú sale de la tabla, 
+              pero con el menú inline suele funcionar bien con overflow-x-auto también */}
+
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left text-neutral-600">
               <tr>
@@ -214,8 +232,8 @@ export default function Facturas() {
               )}
 
               {!loading &&
-                filtered.map((r, idx) => (
-                  <tr key={r.id} className="relative">
+                filtered.map((r) => (
+                  <tr key={r.id} className="relative group hover:bg-neutral-50/50">
                     <td className="px-4 py-3 font-mono text-neutral-600">{r.numero}</td>
                     <td className="px-4 py-3">{r.cliente}</td>
                     <td className="px-4 py-3">{r.fecha}</td>
@@ -224,19 +242,19 @@ export default function Facturas() {
                       <PillMoney value={r.total} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => {
-                          const rect = e.currentTarget?.getBoundingClientRect?.()
-                          if (!rect) return
-                          setMenu((m) =>
-                            m.row?.id === r.id ? { rect: null, row: null } : { rect, row: r }
-                          )
-                        }}
-                        className="p-2 rounded-lg hover:bg-neutral-100"
-                        aria-label="acciones"
-                      >
-                        ⋮
-                      </button>
+                      {/* LÓGICA DEL MENÚ CORREGIDA */}
+                      <div className="relative inline-block text-left">
+                        <button
+                          onClick={() => setOpenMenuId(openMenuId === r.id ? null : r.id)}
+                          className="p-2 rounded-lg hover:bg-neutral-200 text-neutral-500 transition-colors"
+                        >
+                          ⋮
+                        </button>
+
+                        {openMenuId === r.id && (
+                          <Menu onView={() => verDetalles(r)} onDelete={() => eliminar(r)} />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -253,7 +271,6 @@ export default function Facturas() {
         </div>
       </div>
 
-      {/* Crear */}
       <CreateInvoiceModal
         open={openCrear}
         onClose={() => setOpenCrear(false)}
@@ -263,21 +280,7 @@ export default function Facturas() {
         }}
       />
 
-      {/* Ver detalles */}
       <VerFacturaModal open={!!detalle} onClose={() => setDetalle(null)} data={detalle} />
-
-      <FloatingMenu
-        anchorRect={menu.rect}
-        onView={() => {
-          verDetalles(menu.row)
-          setMenu({ rect: null, row: null })
-        }}
-        onDelete={() => {
-          eliminar(menu.row)
-          setMenu({ rect: null, row: null })
-        }}
-        onClose={() => setMenu({ rect: null, row: null })}
-      />
     </main>
   )
 }

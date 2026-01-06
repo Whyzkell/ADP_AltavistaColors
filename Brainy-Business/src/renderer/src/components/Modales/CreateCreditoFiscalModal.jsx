@@ -1,6 +1,7 @@
 // src/renderer/src/components/Modales/CreateCreditoFiscalModal.jsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { fetchProducts, createCreditoFiscal } from '../../api'
+import Swal from 'sweetalert2' // <--- IMPORTAMOS SWAL
 
 // <--- URL para cargar las fotos
 const API_BASE = 'http://localhost:3001'
@@ -45,7 +46,7 @@ const Input = ({ className = '', ...props }) => (
 const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0, maxStock: null }
 
 /* =======================================================
-    Modal COMPLETO de Crédito Fiscal
+   Modal COMPLETO de Crédito Fiscal
    ======================================================= */
 export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
   /* ------- Datos generales ------- */
@@ -80,7 +81,13 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
           if (p.maxStock !== null && p.maxStock !== undefined) {
             if (val > p.maxStock) {
-              alert(`¡Alto! Solo hay ${p.maxStock} unidades disponibles de "${p.nombre}".`)
+              // REEMPLAZO 1: Alerta de stock manual
+              Swal.fire({
+                icon: 'warning',
+                title: 'Stock Alcanzado',
+                text: `Solo hay ${p.maxStock} unidades disponibles de "${p.nombre}".`,
+                confirmButtonColor: '#11A5A3'
+              })
               val = p.maxStock
             }
           }
@@ -136,7 +143,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
             codigo: r.codigo,
             categoria: r.categoria,
             existencias: Number(r.existencias ?? r.stock ?? r.cantidad ?? 999999),
-            imagen: r.imagen // <--- CAMBIO: Guardamos imagen
+            imagen: r.imagen
           }))
 
         if (alive) setResults(mapped.slice(0, 50))
@@ -162,7 +169,13 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         const currentCant = Number(copy[idx].cant || 0)
 
         if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
-          alert(`No puedes agregar más. Solo hay ${item.existencias} en inventario.`)
+          // REEMPLAZO 2: Alerta de stock buscador
+          Swal.fire({
+            icon: 'warning',
+            title: 'Límite de Stock',
+            text: `No puedes agregar más. Solo hay ${item.existencias} en inventario.`,
+            confirmButtonColor: '#11A5A3'
+          })
           return copy
         }
 
@@ -175,7 +188,13 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
       }
 
       if (item.existencias <= 0) {
-        alert('Este producto no tiene existencias disponibles.')
+        // REEMPLAZO 3: Producto agotado
+        Swal.fire({
+          icon: 'error',
+          title: '¡Agotado!',
+          text: 'Este producto no tiene existencias disponibles.',
+          confirmButtonColor: '#ef4444'
+        })
         return arr
       }
 
@@ -205,10 +224,27 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
   /* ------- Submit ------- */
   const [submitting, setSubmitting] = useState(false)
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!f.cliente.trim()) return alert('Ingresa el cliente')
-    if (!f.nit.trim()) return alert('Ingresa el NIT')
+
+    // REEMPLAZO 4: Validaciones del formulario
+    if (!f.cliente.trim()) {
+      return Swal.fire({
+        icon: 'warning',
+        title: 'Faltan datos',
+        text: 'Ingresa el nombre del cliente',
+        confirmButtonColor: '#11A5A3'
+      })
+    }
+    if (!f.nit.trim()) {
+      return Swal.fire({
+        icon: 'warning',
+        title: 'Faltan datos',
+        text: 'Ingresa el NIT del cliente',
+        confirmButtonColor: '#11A5A3'
+      })
+    }
 
     const productos = validProds.map((p) => ({
       pid: p.pid ?? null,
@@ -218,7 +254,12 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
     }))
 
     if (productos.length === 0 || sumas <= 0) {
-      return alert('Agrega al menos 1 producto válido')
+      return Swal.fire({
+        icon: 'warning',
+        title: 'Sin productos',
+        text: 'Agrega al menos 1 producto válido',
+        confirmButtonColor: '#11A5A3'
+      })
     }
 
     const payload = {
@@ -235,8 +276,18 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
     try {
       setSubmitting(true)
-      await createCreditoFiscal(payload)
+      const saved = await createCreditoFiscal(payload)
 
+      // Mensaje de éxito opcional (se muestra antes de cerrar)
+      Swal.fire({
+        icon: 'success',
+        title: 'Crédito Fiscal Creado',
+        text: 'El documento se ha guardado correctamente.',
+        timer: 2000,
+        showConfirmButton: false
+      })
+
+      // Limpieza
       setF({
         cliente: '',
         direccion: '',
@@ -260,7 +311,12 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
       onClose?.()
     } catch (e) {
       console.error(e)
-      alert(e.message || 'Error creando crédito fiscal')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error al guardar',
+        text: e.message || 'Ocurrió un error creando el crédito fiscal',
+        confirmButtonColor: '#11A5A3'
+      })
     } finally {
       setSubmitting(false)
     }
@@ -276,7 +332,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               value={f.cliente}
               onChange={(e) => up('cliente', e.target.value)}
               placeholder="Cliente a facturar"
-              required
+              required // HTML validation como backup
             />
           </Field>
           <Field label="Dirección">
@@ -391,7 +447,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                     className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                      {/* <--- CAMBIO: IMAGEN EN EL BUSCADOR */}
+                      {/* IMAGEN EN EL BUSCADOR */}
                       <div className="h-9 w-9 rounded bg-neutral-100 flex-shrink-0 overflow-hidden border border-neutral-200">
                         {r.imagen ? (
                           <img

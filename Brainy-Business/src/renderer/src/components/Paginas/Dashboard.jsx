@@ -5,6 +5,7 @@ import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
 import CreateCreditoFiscalModal from '../Modales/CreateCreditoFiscalModal.jsx'
 import { fetchProducts, listInvoices, listFiscalCredits } from '../../api'
 import TopProducts from './TopProducts.jsx'
+import Swal from 'sweetalert2' // <--- 1. IMPORTAMOS SWAL
 
 export default function Dashboard() {
   const [openCrearFactura, setOpenCrearFactura] = useState(false)
@@ -26,16 +27,10 @@ export default function Dashboard() {
 
       setInventory(products || [])
 
-      // --- AQUÍ ESTABA EL ERROR ---
-      // En Ventas.jsx normalizamos los datos, aquí también debemos hacerlo
-      // para asegurar que 'fecha' y 'monto' siempre existan.
-
       const mappedInvoices = (invoices || []).map((f) => ({
         ...f,
         tipo: 'Factura',
-        // Si la API trae 'fecha_emision', lo guardamos como 'fecha'
         fecha: f.fecha_emision || f.fecha,
-        // Si la API trae 'total', lo guardamos como 'monto'
         monto: f.total || f.monto
       }))
 
@@ -50,7 +45,13 @@ export default function Dashboard() {
       setSales(allSales)
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
-      alert('No se pudo cargar el dashboard. Revisa la conexión con la API.')
+      // Reemplazamos el alert nativo por uno bonito si falla la carga inicial
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'No se pudo cargar el dashboard. Revisa la conexión con la API.',
+        confirmButtonColor: '#11A5A3'
+      })
     } finally {
       setLoading(false)
     }
@@ -60,24 +61,35 @@ export default function Dashboard() {
     fetchData()
   }, [])
 
-  // --- LÓGICA DE FILTRADO (Igual que en Ventas.jsx) ---
+  // 2. FUNCIÓN PARA MANEJAR EL ÉXITO DE FACTURA
+  const handleCreateFactura = async () => {
+    await fetchData() // Recargamos los datos del dashboard
+    setOpenCrearFactura(false) // Cerramos el modal
+
+    // Mostramos la alerta bonita
+    Swal.fire({
+      icon: 'success',
+      title: 'Factura Creada',
+      text: 'La factura se ha registrado correctamente.',
+      timer: 2000,
+      showConfirmButton: false
+    })
+  }
+
+  // --- LÓGICA DE FILTRADO ---
   const dashboardStats = useMemo(() => {
     const now = new Date()
     const currentYear = now.getUTCFullYear()
     const currentMonth = now.getUTCMonth() // 0 = Enero
 
     const salesThisMonth = sales.filter((venta) => {
-      // Ahora 'venta.fecha' seguro existe gracias al mapeo de arriba
       if (!venta.fecha) return false
-
       const ventaDate = new Date(venta.fecha)
-
       // Filtramos usando UTC
       return ventaDate.getUTCFullYear() === currentYear && ventaDate.getUTCMonth() === currentMonth
     })
 
     const totalAmount = salesThisMonth.reduce((acc, venta) => {
-      // Ahora 'venta.monto' seguro existe
       const valorVenta = Number(venta.monto || 0)
       return acc + valorVenta
     }, 0)
@@ -116,14 +128,14 @@ export default function Dashboard() {
         <InventoryPreview items={inventory} />
       </div>
 
+      {/* MODAL FACTURA: Usamos onCreate para lanzar la alerta */}
       <CreateInvoiceModal
         open={openCrearFactura}
-        onClose={() => {
-          setOpenCrearFactura(false)
-          fetchData()
-        }}
+        onClose={() => setOpenCrearFactura(false)}
+        onCreate={handleCreateFactura}
       />
 
+      {/* MODAL CRÉDITO: El modal ya tiene la alerta interna, solo recargamos */}
       <CreateCreditoFiscalModal
         open={openCrearCredito}
         onClose={() => {

@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import ModalFactura from './ModalFactura.jsx'
 import { fetchProducts, createInvoice } from '../../api'
+import Swal from 'sweetalert2' // <--- IMPORTANTE: Importamos SweetAlert2
 
 // <--- URL para cargar las fotos
 const API_BASE = 'http://localhost:3001'
@@ -33,7 +34,13 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
           if (p.maxStock !== null && p.maxStock !== undefined) {
             if (val > p.maxStock) {
-              alert(`¡Alto! Solo hay ${p.maxStock} unidades disponibles de "${p.nombre}".`)
+              // REEMPLAZO 1: Alerta de stock manual
+              Swal.fire({
+                icon: 'warning',
+                title: 'Stock Alcanzado',
+                text: `Solo hay ${p.maxStock} unidades disponibles de "${p.nombre}".`,
+                confirmButtonColor: '#11A5A3'
+              })
               val = p.maxStock
             }
           }
@@ -100,7 +107,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           codigo: r.codigo,
           categoria: r.categoria,
           existencias: Number(r.existencias ?? r.stock ?? r.cantidad ?? 999999),
-          imagen: r.imagen // <--- CAMBIO: Guardamos la referencia de la imagen
+          imagen: r.imagen
         }))
 
         if (alive) setResults(mapped.slice(0, 50))
@@ -127,7 +134,13 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         const currentCant = Number(copy[idx].cant || 0)
 
         if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
-          alert(`No puedes agregar más. Solo hay ${item.existencias} en inventario.`)
+          // REEMPLAZO 2: Alerta de stock al sumar desde buscador
+          Swal.fire({
+            icon: 'warning',
+            title: 'Límite de Stock',
+            text: `No puedes agregar más. Solo hay ${item.existencias} en inventario.`,
+            confirmButtonColor: '#11A5A3'
+          })
           return copy
         }
 
@@ -140,7 +153,13 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       }
 
       if (item.existencias <= 0) {
-        alert('Este producto no tiene existencias disponibles.')
+        // REEMPLAZO 3: Alerta de producto agotado
+        Swal.fire({
+          icon: 'error',
+          title: '¡Agotado!',
+          text: 'Este producto no tiene existencias disponibles.',
+          confirmButtonColor: '#ef4444'
+        })
         return arr
       }
 
@@ -165,26 +184,57 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!f.cliente.trim()) return alert('Ingresa el nombre del cliente')
-    if (prods.length === 0 || resumen.total <= 0)
-      return alert('Agrega al menos 1 producto con monto válido')
 
-    const saved = await createInvoice({
-      cliente: f.cliente.trim(),
-      direccion: f.direccion.trim(),
-      dui: f.dui.trim(),
-      nit: f.nit.trim(),
-      condiciones: f.condiciones.trim(),
-      ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
-      productos: prods
-    })
+    // REEMPLAZO 4: Validaciones del formulario
+    if (!f.cliente.trim()) {
+      return Swal.fire({
+        icon: 'warning',
+        title: 'Faltan datos',
+        text: 'Ingresa el nombre del cliente',
+        confirmButtonColor: '#11A5A3'
+      })
+    }
 
-    onCreate?.(saved)
-    setF({ cliente: '', direccion: '', ventaCuentaDe: '', dui: '', condiciones: '', nit: '' })
-    setProds([{ ...emptyProd }])
-    setQ('')
-    setResults([])
-    onClose?.()
+    if (prods.length === 0 || resumen.total <= 0) {
+      return Swal.fire({
+        icon: 'warning',
+        title: 'Factura Vacía',
+        text: 'Agrega al menos 1 producto con monto válido',
+        confirmButtonColor: '#11A5A3'
+      })
+    }
+
+    try {
+      setSubmitting(true)
+      const saved = await createInvoice({
+        cliente: f.cliente.trim(),
+        direccion: f.direccion.trim(),
+        dui: f.dui.trim(),
+        nit: f.nit.trim(),
+        condiciones: f.condiciones.trim(),
+        ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
+        productos: prods
+      })
+
+      onCreate?.(saved)
+
+      // Limpiamos todo
+      setF({ cliente: '', direccion: '', ventaCuentaDe: '', dui: '', condiciones: '', nit: '' })
+      setProds([{ ...emptyProd }])
+      setQ('')
+      setResults([])
+      onClose?.()
+    } catch (error) {
+      console.error(error)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error al guardar',
+        text: error.message || 'Ocurrió un error al crear la factura',
+        confirmButtonColor: '#11A5A3'
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -283,7 +333,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                       className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-3 overflow-hidden">
-                        {/* <--- CAMBIO: IMAGEN EN EL BUSCADOR */}
+                        {/* IMAGEN EN EL BUSCADOR */}
                         <div className="h-9 w-9 rounded bg-neutral-100 flex-shrink-0 overflow-hidden border border-neutral-200">
                           {r.imagen ? (
                             <img

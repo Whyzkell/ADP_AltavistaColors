@@ -5,11 +5,11 @@ import VerCreditoFiscalModal from '../Modales/VerCreditoFiscalModal.jsx'
 import {
   listFiscalCredits,
   getFiscalCredit,
-  deleteFiscalCredit,
-  createFiscalCredit, // <-- Esta ya no se usa aquí, pero la dejamos
-  fetchProducts
+  deleteFiscalCredit
+  // createFiscalCredit, <-- No se usa aquí directamente
+  // fetchProducts <-- No se usa aquí
 } from '../../api'
-import { createPortal } from 'react-dom'
+import Swal from 'sweetalert2' // <--- IMPORTAMOS SWAL
 
 const PillMoney = ({ value }) => (
   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 ring-1 ring-green-200">
@@ -25,6 +25,7 @@ function fmtFecha(d) {
     return String(d)
   }
 }
+
 function mapRow(r) {
   return {
     id: r.id,
@@ -36,35 +37,24 @@ function mapRow(r) {
   }
 }
 
-// Menú flotante (igual que Facturas)
-function FloatingMenu({ anchorRect, onView, onDelete, onClose }) {
-  if (!anchorRect || typeof document === 'undefined') return null
-  const WIDTH = 176
-  const top = anchorRect.bottom + window.scrollY + 6
-  let left = anchorRect.right + window.scrollX - WIDTH
-  left = Math.max(8, Math.min(left, window.innerWidth - WIDTH - 8))
-  return createPortal(
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div
-        className="fixed z-50 bg-white rounded-xl shadow-lg ring-1 ring-neutral-200 py-2"
-        style={{ top, left, width: WIDTH }}
-      >
-        <button onClick={onView} className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50">
-          Ver detalles
-        </button>
-        <div className="h-px bg-neutral-200 mx-2" />
-        <button
-          onClick={onDelete}
-          className="w-full text-left px-3 py-2 text-sm text-rose-600 hover:bg-rose-50"
-        >
-          Eliminar
-        </button>
-      </div>
-    </>,
-    document.body
-  )
-}
+// --- MENÚ INLINE (Igual que en Facturas e Inventario) ---
+const Menu = ({ onView, onDelete }) => (
+  <div className="absolute right-0 mt-1 w-32 bg-white rounded-xl shadow-lg ring-1 ring-neutral-200 py-2 z-20">
+    <button
+      onClick={onView}
+      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 text-neutral-700"
+    >
+      Ver detalles
+    </button>
+    <div className="h-px bg-neutral-200 mx-2" />
+    <button
+      onClick={onDelete}
+      className="w-full text-left px-3 py-2 text-sm text-rose-600 hover:bg-rose-50"
+    >
+      Eliminar
+    </button>
+  </div>
+)
 
 export default function CreditoFiscal() {
   const [query, setQuery] = useState('')
@@ -73,19 +63,10 @@ export default function CreditoFiscal() {
   const [openCrear, setOpenCrear] = useState(false)
   const [detalle, setDetalle] = useState(null)
 
-  // menú flotante
-  const [menu, setMenu] = useState({ rect: null, row: null })
-  useEffect(() => {
-    const close = () => setMenu({ rect: null, row: null })
-    window.addEventListener('scroll', close, true)
-    window.addEventListener('resize', close)
-    return () => {
-      window.removeEventListener('scroll', close, true)
-      window.removeEventListener('resize', close)
-    }
-  }, [])
+  // Estado simple para controlar qué menú está abierto
+  const [openMenuId, setOpenMenuId] = useState(null)
 
-  // 1. LÓGICA DE FETCH MOVIDA A SU PROPIA FUNCIÓN
+  // 1. LÓGICA DE FETCH
   const fetchLista = async () => {
     try {
       setLoading(true)
@@ -93,13 +74,19 @@ export default function CreditoFiscal() {
       setItems(rows.map(mapRow))
     } catch (e) {
       console.error(e)
-      alert(e.message || 'Error cargando créditos')
+      // Alerta de error con Swal
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'Error cargando créditos fiscales',
+        confirmButtonColor: '#11A5A3'
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  // 2. USEEFFECT AHORA LLAMA A LA NUEVA FUNCIÓN
+  // 2. USEEFFECT
   useEffect(() => {
     fetchLista()
   }, [])
@@ -112,10 +99,9 @@ export default function CreditoFiscal() {
     )
   }, [items, query])
 
-  // 3. LA FUNCIÓN 'handleCreate' YA NO ES NECESARIA Y SE ELIMINA
-  // const handleCreate = async (payload) => { ... }
-
   const verDetalles = async (row) => {
+    setOpenMenuId(null) // Cerramos menú
+
     try {
       const full = await getFiscalCredit(row.id)
       setDetalle({
@@ -126,18 +112,53 @@ export default function CreditoFiscal() {
       })
     } catch (e) {
       console.error(e)
-      alert(e.message || 'No se pudo cargar el crédito fiscal')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'No se pudo cargar el crédito fiscal',
+        confirmButtonColor: '#11A5A3'
+      })
     }
   }
 
   const eliminar = async (row) => {
-    if (!confirm(`¿Eliminar el crédito ${row.numero}?`)) return
+    setOpenMenuId(null) // Cerramos menú
+
+    // a. Confirmación con Swal
+    const result = await Swal.fire({
+      title: `¿Eliminar crédito ${row.numero}?`,
+      text: 'Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E11D48',
+      cancelButtonColor: '#11A5A3',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
+
     try {
+      // b. Eliminar
       await deleteFiscalCredit(row.id)
       setItems((arr) => arr.filter((x) => x.id !== row.id))
+
+      // c. Mensaje de éxito
+      Swal.fire({
+        icon: 'success',
+        title: 'Eliminado',
+        text: 'El crédito fiscal ha sido eliminado correctamente.',
+        timer: 1500,
+        showConfirmButton: false
+      })
     } catch (e) {
       console.error(e)
-      alert(e.message || 'No se pudo eliminar')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'No se pudo eliminar el crédito',
+        confirmButtonColor: '#11A5A3'
+      })
     }
   }
 
@@ -146,7 +167,7 @@ export default function CreditoFiscal() {
       <div className="max-w-7xl mx-auto">
         <div>
           <h1 className="text-xl font-semibold text-black">Crédito Fiscal</h1>
-          <p className="text-sm text-neutral-500">Créditos Fiscales</p>
+          <p className="text-sm text-neutral-500">Créditos Fiscales emitidos</p>
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -163,13 +184,13 @@ export default function CreditoFiscal() {
           </div>
           <button
             onClick={() => setOpenCrear(true)}
-            className="bg-[#11A5A3] hover:bg-[#Da2864]  text-white px-4 py-2 rounded-xl text-sm font-semibold"
+            className="bg-[#11A5A3] hover:bg-[#Da2864] text-white px-4 py-2 rounded-xl text-sm font-semibold"
           >
             Agregar crédito
           </button>
         </div>
 
-        <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 mb-8 overflow-x-auto overflow-y-visible">
+        <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 mb-8 overflow-visible">
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left text-neutral-600">
               <tr>
@@ -191,7 +212,7 @@ export default function CreditoFiscal() {
               )}
               {!loading &&
                 filtered.map((r) => (
-                  <tr key={r.id}>
+                  <tr key={r.id} className="relative group hover:bg-neutral-50/50">
                     <td className="px-4 py-3 font-mono text-neutral-600">{r.numero}</td>
                     <td className="px-4 py-3">{r.cliente}</td>
                     <td className="px-4 py-3">{r.fecha}</td>
@@ -200,18 +221,19 @@ export default function CreditoFiscal() {
                       <PillMoney value={r.total} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setMenu((m) =>
-                            m.row?.id === r.id ? { rect: null, row: null } : { rect, row: r }
-                          )
-                        }}
-                        className="p-2 rounded-lg hover:bg-neutral-100"
-                        aria-label="acciones"
-                      >
-                        ⋮
-                      </button>
+                      {/* Menú Inline Corregido */}
+                      <div className="relative inline-block text-left">
+                        <button
+                          onClick={() => setOpenMenuId(openMenuId === r.id ? null : r.id)}
+                          className="p-2 rounded-lg hover:bg-neutral-200 text-neutral-500 transition-colors"
+                        >
+                          ⋮
+                        </button>
+
+                        {openMenuId === r.id && (
+                          <Menu onView={() => verDetalles(r)} onDelete={() => eliminar(r)} />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -230,29 +252,14 @@ export default function CreditoFiscal() {
       {/* Crear */}
       <CreateCreditoFiscalModal
         open={openCrear}
-        // 4. ONCLOSE AHORA HACE DOS COSAS:
         onClose={() => {
-          setOpenCrear(false) // a) Cierra el modal
-          fetchLista() // b) Refresca la lista de créditos
+          setOpenCrear(false)
+          fetchLista() // Refresca lista al cerrar (si se creó algo)
         }}
-        // 5. 'onCreate' YA NO SE NECESITA
       />
 
       {/* Ver detalles */}
       <VerCreditoFiscalModal open={!!detalle} onClose={() => setDetalle(null)} data={detalle} />
-
-      <FloatingMenu
-        anchorRect={menu.rect}
-        onView={() => {
-          verDetalles(menu.row)
-          setMenu({ rect: null, row: null })
-        }}
-        onDelete={() => {
-          eliminar(menu.row)
-          setMenu({ rect: null, row: null })
-        }}
-        onClose={() => setMenu({ rect: null, row: null })}
-      />
     </main>
   )
 }

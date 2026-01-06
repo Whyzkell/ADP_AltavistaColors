@@ -5,6 +5,7 @@ import VerFacturaModal from '../Modales/VerFacturaModal.jsx'
 import VerCreditoFiscalModal from '../Modales/VerCreditoFiscalModal.jsx'
 import FacturaIcon from '../../../../../resources/Factura.png'
 import CreditoIcon from '../../../../../resources/CreditoFiscal.png'
+import Swal from 'sweetalert2' // <--- 1. IMPORTAMOS SWAL
 import {
   listInvoices,
   listFiscalCredits,
@@ -23,7 +24,6 @@ const PillMoney = ({ value }) => (
 function fmtFecha(d) {
   if (!d) return '—'
   try {
-    // Usamos UTC para mostrar la fecha correcta en la tabla
     return new Date(d).toLocaleDateString('es-SV', { timeZone: 'UTC' })
   } catch {
     return String(d)
@@ -64,7 +64,7 @@ export default function Ventas() {
         api_id: f.id,
         id: f.numero || `F-${f.id}`,
         cliente: f.cliente,
-        fecha: f.fecha_emision || f.fecha, // Aseguramos tomar la fecha
+        fecha: f.fecha_emision || f.fecha,
         tipo: 'Factura',
         monto: f.total || f.monto
       }))
@@ -79,13 +79,17 @@ export default function Ventas() {
       }))
 
       const allVentas = [...mappedFacturas, ...mappedCreditos]
-      // Ordenar: más recientes primero
       allVentas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
 
       setVentas(allVentas)
     } catch (e) {
       console.error('Error cargando ventas:', e)
-      alert(e.message || 'No se pudieron cargar las ventas')
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'No se pudieron cargar las ventas',
+        confirmButtonColor: '#11A5A3'
+      })
     } finally {
       setLoading(false)
     }
@@ -95,23 +99,34 @@ export default function Ventas() {
     fetchVentas()
   }, [])
 
+  // 2. FUNCIÓN PARA MANEJAR EL ÉXITO DE FACTURA
+  const handleCreateFactura = async () => {
+    await fetchVentas() // Recargamos la lista
+    setOpenFactura(false) // Cerramos el modal
+
+    // Mostramos la alerta
+    Swal.fire({
+      icon: 'success',
+      title: 'Factura Creada',
+      text: 'La factura se ha guardado correctamente.',
+      timer: 2000,
+      showConfirmButton: false
+    })
+  }
+
   // --- LÓGICA DE ESTADÍSTICAS DEL MES ACTUAL ---
   const monthStats = useMemo(() => {
     const now = new Date()
     const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth() // 0 = Enero
+    const currentMonth = now.getUTCMonth()
 
-    // Filtramos SOLO las ventas de este mes y año
     const thisMonthSales = ventas.filter((v) => {
       if (!v.fecha) return false
       const d = new Date(v.fecha)
-      // Usamos UTC para que coincida con la DB sin problemas de horario
       return d.getUTCFullYear() === currentYear && d.getUTCMonth() === currentMonth
     })
 
     const total = thisMonthSales.reduce((acc, v) => acc + Number(v.monto || 0), 0)
-
-    // Nombre del mes (ej: Enero)
     const monthName = now.toLocaleString('es-ES', { month: 'long' })
     const capitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1)
 
@@ -121,7 +136,6 @@ export default function Ventas() {
       name: capitalized
     }
   }, [ventas])
-  // ---------------------------------------------
 
   const filtered = useMemo(
     () =>
@@ -141,13 +155,30 @@ export default function Ventas() {
         setDetalleCredito(fullCredito)
       }
     } catch (e) {
-      alert(`Error al cargar el detalle: ${e.message}`)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: `Error al cargar el detalle: ${e.message}`,
+        confirmButtonColor: '#11A5A3'
+      })
     }
   }
 
   const onDelete = async (row) => {
     const { tipo, api_id, id: numero } = row
-    if (!confirm(`¿Estás seguro de eliminar ${tipo} ${numero}?`)) return
+
+    const result = await Swal.fire({
+      title: `¿Eliminar ${tipo} ${numero}?`,
+      text: 'Esta acción no se puede deshacer.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#E11D48',
+      cancelButtonColor: '#11A5A3',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (!result.isConfirmed) return
 
     try {
       if (tipo === 'Factura') {
@@ -156,32 +187,42 @@ export default function Ventas() {
         await deleteFiscalCredit(api_id)
       }
       setVentas((arr) => arr.filter((x) => !(x.api_id === api_id && x.tipo === tipo)))
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Eliminado',
+        text: 'El registro ha sido eliminado correctamente.',
+        timer: 1500,
+        showConfirmButton: false
+      })
     } catch (e) {
-      alert(`Error al eliminar: ${e.message}`)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error al eliminar',
+        text: e.message || 'No se pudo eliminar el registro',
+        confirmButtonColor: '#11A5A3'
+      })
     }
   }
 
   return (
     <main className="flex-1 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* TARJETAS SUPERIORES: AHORA DINÁMICAS */}
+        {/* TARJETAS SUPERIORES */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
             <p className="text-sm font-semibold text-black">Ventas del Mes</p>
             <div className="mt-4 flex flex-wrap gap-6">
               <div>
                 <p className="text-[11px] uppercase text-neutral-500">Número de ventas</p>
-                {/* Cantidad solo de este mes */}
                 <p className="text-lg font-semibold text-black">{monthStats.count}</p>
               </div>
               <div>
                 <p className="text-[11px] uppercase text-neutral-500">Mes</p>
-                {/* Nombre del mes dinámico */}
                 <p className="text-lg font-semibold text-black">{monthStats.name}</p>
               </div>
               <div>
                 <p className="text-[11px] uppercase text-neutral-500">Ventas</p>
-                {/* Dinero acumulado solo de este mes */}
                 <p className="text-lg font-semibold text-black">${monthStats.total.toFixed(2)}</p>
               </div>
             </div>
@@ -208,7 +249,7 @@ export default function Ventas() {
           </div>
         </div>
 
-        {/* TABLA: MUESTRA TODO EL HISTORIAL */}
+        {/* TABLA DE VENTAS */}
         <div>
           <p className="text-sm font-semibold text-black">Todas las ventas (Historial)</p>
           <div className="flex items-center justify-between mt-3">
@@ -295,13 +336,14 @@ export default function Ventas() {
         </div>
       </div>
 
+      {/* MODAL FACTURA: Usamos onCreate para lanzar la alerta */}
       <CreateInvoiceModal
         open={openFactura}
-        onClose={() => {
-          setOpenFactura(false)
-          fetchVentas()
-        }}
+        onClose={() => setOpenFactura(false)}
+        onCreate={handleCreateFactura}
       />
+
+      {/* MODAL CRÉDITO: El modal ya tiene la alerta interna, solo recargamos */}
       <CreateCreditoFiscalModal
         open={openCredito}
         onClose={() => {
@@ -309,6 +351,7 @@ export default function Ventas() {
           fetchVentas()
         }}
       />
+
       <VerFacturaModal
         open={!!detalleFactura}
         onClose={() => setDetalleFactura(null)}
