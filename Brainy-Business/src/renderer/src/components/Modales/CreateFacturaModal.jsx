@@ -1,9 +1,11 @@
-// src/renderer/src/Modales/CreateFacturaModal.jsx
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import ModalFactura from './ModalFactura.jsx'
 import { fetchProducts, createInvoice } from '../../api'
 
-const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0 }
+// <--- URL para cargar las fotos
+const API_BASE = 'http://localhost:3001'
+
+const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0, maxStock: null }
 const PAGE_SIZE = 6
 
 export default function CreateInvoiceModal({ open, onClose, onCreate }) {
@@ -20,12 +22,29 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
   /* ---------- Productos de la factura ---------- */
   const [prods, setProds] = useState([{ ...emptyProd }])
-  const setProd = (i, k, v) =>
+
+  const setProd = (i, k, v) => {
     setProds((arr) =>
-      arr.map((p, idx) =>
-        idx === i ? { ...p, [k]: k === 'nombre' ? v : Number.isNaN(Number(v)) ? v : Number(v) } : p
-      )
+      arr.map((p, idx) => {
+        if (idx !== i) return p
+
+        if (k === 'cant') {
+          let val = Number.isNaN(Number(v)) ? 0 : Number(v)
+
+          if (p.maxStock !== null && p.maxStock !== undefined) {
+            if (val > p.maxStock) {
+              alert(`¡Alto! Solo hay ${p.maxStock} unidades disponibles de "${p.nombre}".`)
+              val = p.maxStock
+            }
+          }
+          return { ...p, cant: val }
+        }
+
+        return { ...p, [k]: k === 'nombre' ? v : Number.isNaN(Number(v)) ? v : Number(v) }
+      })
     )
+  }
+
   const addEmptyRow = () => setProds((p) => [...p, { ...emptyProd }])
   const removeRow = (i) => setProds((arr) => arr.filter((_, idx) => idx !== i))
 
@@ -65,7 +84,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         setBusy(true)
         const rows = await fetchProducts(text)
 
-        // Filtro local por si el backend no filtró
+        // Filtro local
         const needle = text.toLowerCase()
         const local = rows.filter((r) => {
           const nombre = (r.nombre ?? '').toLowerCase()
@@ -79,7 +98,9 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           nombre: r.nombre,
           precio: Number(r.precio ?? r.precio_unit ?? 0),
           codigo: r.codigo,
-          categoria: r.categoria
+          categoria: r.categoria,
+          existencias: Number(r.existencias ?? r.stock ?? r.cantidad ?? 999999),
+          imagen: r.imagen // <--- CAMBIO: Guardamos la referencia de la imagen
         }))
 
         if (alive) setResults(mapped.slice(0, 50))
@@ -100,19 +121,46 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
   const addFromSearch = (item) => {
     setProds((arr) => {
       const idx = arr.findIndex((p) => p.pid && p.pid === item.pid)
+
       if (idx !== -1) {
         const copy = [...arr]
-        copy[idx] = { ...copy[idx], cant: Number(copy[idx].cant || 0) + 1 }
+        const currentCant = Number(copy[idx].cant || 0)
+
+        if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
+          alert(`No puedes agregar más. Solo hay ${item.existencias} en inventario.`)
+          return copy
+        }
+
+        copy[idx] = {
+          ...copy[idx],
+          cant: currentCant + 1,
+          maxStock: item.existencias
+        }
         return copy
       }
-      return [...arr, { pid: item.pid, cant: 1, nombre: item.nombre, precio: item.precio }]
+
+      if (item.existencias <= 0) {
+        alert('Este producto no tiene existencias disponibles.')
+        return arr
+      }
+
+      return [
+        ...arr,
+        {
+          pid: item.pid,
+          cant: 1,
+          nombre: item.nombre,
+          precio: item.precio,
+          maxStock: item.existencias
+        }
+      ]
     })
     setQ('')
     setResults([])
     setTimeout(() => goTo(pages.length), 0)
   }
 
-  /* ---------- Submit (crea en backend) ---------- */
+  /* ---------- Submit ---------- */
   const [submitting, setSubmitting] = useState(false)
 
   const handleSubmit = async (e) => {
@@ -121,7 +169,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     if (prods.length === 0 || resumen.total <= 0)
       return alert('Agrega al menos 1 producto con monto válido')
 
-    // Llama a la API
     const saved = await createInvoice({
       cliente: f.cliente.trim(),
       direccion: f.direccion.trim(),
@@ -129,13 +176,10 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       nit: f.nit.trim(),
       condiciones: f.condiciones.trim(),
       ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
-      productos: prods // los mismos del estado [{pid,cant,nombre,precio}]
+      productos: prods
     })
 
-    // Si quieres reflejarlo en la UI del listado:
     onCreate?.(saved)
-
-    // Reset
     setF({ cliente: '', direccion: '', ventaCuentaDe: '', dui: '', condiciones: '', nit: '' })
     setProds([{ ...emptyProd }])
     setQ('')
@@ -146,7 +190,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
   return (
     <ModalFactura open={open} onClose={onClose} title="Crear Factura">
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Contenido scrolleable */}
         <div className="max-h-[55vh] overflow-y-auto snap-y snap-mandatory pr-1">
           {/* Datos del cliente */}
           <section className="snap-start mt-6">
@@ -212,7 +255,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                 <button
                   type="button"
                   className="h-9 w-9 rounded-full grid place-items-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                  title="Buscar"
                 >
                   {busy ? (
                     '…'
@@ -238,16 +280,39 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                       key={r.pid}
                       type="button"
                       onClick={() => addFromSearch(r)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
                     >
-                      <span className="truncate">
-                        <span className="font-medium">{r.nombre}</span>
-                        {r.categoria ? (
-                          <span className="text-neutral-400"> • {r.categoria}</span>
-                        ) : null}
-                        {r.codigo ? <span className="text-neutral-400"> • {r.codigo}</span> : null}
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {/* <--- CAMBIO: IMAGEN EN EL BUSCADOR */}
+                        <div className="h-9 w-9 rounded bg-neutral-100 flex-shrink-0 overflow-hidden border border-neutral-200">
+                          {r.imagen ? (
+                            <img
+                              src={`${API_BASE}/uploads/${r.imagen}`}
+                              className="h-full w-full object-cover"
+                              alt=""
+                              onError={(e) => (e.target.style.display = 'none')}
+                            />
+                          ) : (
+                            <span className="grid place-items-center h-full w-full text-[10px] text-neutral-400">
+                              📷
+                            </span>
+                          )}
+                        </div>
+
+                        <span className="truncate">
+                          <span className="font-medium">{r.nombre}</span>
+                          {r.categoria ? (
+                            <span className="text-neutral-400"> • {r.categoria}</span>
+                          ) : null}
+                          <span className="text-xs text-blue-600 ml-2 font-bold">
+                            (Stock: {r.existencias})
+                          </span>
+                        </span>
+                      </div>
+
+                      <span className="ml-3 text-neutral-700 font-medium">
+                        ${Number(r.precio).toFixed(2)}
                       </span>
-                      <span className="ml-3 text-neutral-700">${Number(r.precio).toFixed(2)}</span>
                     </button>
                   ))}
                 </div>
@@ -278,17 +343,28 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                       <InputGreen
                         type="number"
                         min="0"
+                        max={p.maxStock || 9999}
                         value={p.cant}
                         onChange={(e) => setProd(globalIndex, 'cant', e.target.value)}
                         placeholder="Cant."
                         className="col-span-2"
+                        title={p.maxStock ? `Máximo disponible: ${p.maxStock}` : ''}
                       />
-                      <InputGreen
-                        value={p.nombre}
-                        onChange={(e) => setProd(globalIndex, 'nombre', e.target.value)}
-                        placeholder="Brocha"
-                        className="col-span-4 sm:col-span-5"
-                      />
+
+                      <div className="col-span-4 sm:col-span-5 relative">
+                        <InputGreen
+                          value={p.nombre}
+                          onChange={(e) => setProd(globalIndex, 'nombre', e.target.value)}
+                          placeholder="Brocha"
+                          className="w-full"
+                        />
+                        {p.maxStock !== null && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400 bg-white px-1">
+                            Max: {p.maxStock}
+                          </span>
+                        )}
+                      </div>
+
                       <InputGreen
                         type="number"
                         min="0"
@@ -315,7 +391,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                   )
                 })}
               </div>
-
               {pages.length > 1 && (
                 <div className="flex items-center justify-between mt-3">
                   <button
@@ -371,14 +446,14 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           <button
             type="submit"
             disabled={submitting}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600 shadow-sm disabled:opacity-60"
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-[#11A5A3] shadow-sm disabled:opacity-60"
           >
             {submitting ? 'Creando…' : 'Crear'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500 shadow-sm"
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-[#Da2864] shadow-sm"
           >
             Cancelar
           </button>

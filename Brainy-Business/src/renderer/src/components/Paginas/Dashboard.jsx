@@ -3,19 +3,18 @@ import ControlPanel from '../dashboard/ControlPanel.jsx'
 import InventoryPreview from '../dashboard/InvetoryPreview.jsx'
 import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
 import CreateCreditoFiscalModal from '../Modales/CreateCreditoFiscalModal.jsx'
-import { fetchProducts, listInvoices, listFiscalCredits } from '../../api' // <-- IMPORTAMOS LA API
+import { fetchProducts, listInvoices, listFiscalCredits } from '../../api'
 import TopProducts from './TopProducts.jsx'
 
 export default function Dashboard() {
   const [openCrearFactura, setOpenCrearFactura] = useState(false)
   const [openCrearCredito, setOpenCrearCredito] = useState(false)
 
-  // Estados para los datos reales
+  // Estados para los datos
   const [inventory, setInventory] = useState([])
   const [sales, setSales] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Función para cargar TODOS los datos del dashboard
   const fetchData = async () => {
     try {
       setLoading(true)
@@ -27,7 +26,6 @@ export default function Dashboard() {
 
       setInventory(products || [])
 
-      // Unimos facturas y créditos en una sola lista de "ventas"
       const allSales = [
         ...(invoices.map((f) => ({ ...f, tipo: 'Factura' })) || []),
         ...(credits.map((c) => ({ ...c, tipo: 'Crédito Fiscal' })) || [])
@@ -41,17 +39,53 @@ export default function Dashboard() {
     }
   }
 
-  // Cargar los datos al montar el componente
   useEffect(() => {
     fetchData()
   }, [])
 
-  // Calcular estadísticas de ventas usando useMemo
-  const salesStats = useMemo(() => {
-    const totalAmount = sales.reduce((acc, venta) => acc + Number(venta.total || 0), 0)
+  // --- LÓGICA CORREGIDA: COMPARACIÓN NUMÉRICA UTC ---
+  const dashboardStats = useMemo(() => {
+    // 1. Obtenemos mes y año actuales de tu computadora
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth() // 0 = Enero, 1 = Febrero...
+
+    // console.log("Buscando ventas del mes:", currentMonth + 1, "del año:", currentYear)
+
+    const salesThisMonth = sales.filter((venta) => {
+      if (!venta.fecha) return false
+
+      // Convertimos la fecha de la venta a objeto Date asegurándonos
+      const fechaVenta = new Date(venta.fecha)
+
+      // Verificamos que sea una fecha válida
+      if (isNaN(fechaVenta.getTime())) return false
+
+      // TRUCO MAESTRO: Usamos getUTCFullYear y getUTCMonth.
+      // Esto lee la fecha "cruda" de la base de datos (2026-01-06)
+      // sin restarle horas por la zona horaria de El Salvador.
+      const ventaYear = fechaVenta.getUTCFullYear()
+      const ventaMonth = fechaVenta.getUTCMonth()
+
+      // Comparamos números: Año igual al actual Y Mes igual al actual
+      return ventaYear === currentYear && ventaMonth === currentMonth
+    })
+
+    // 2. Sumamos los montos
+    const totalAmount = salesThisMonth.reduce((acc, venta) => {
+      // Postgres devuelve 'numeric' a veces como string, aseguramos con Number()
+      const valorVenta = Number(venta.monto) || Number(venta.total) || 0
+      return acc + valorVenta
+    }, 0)
+
+    // 3. Nombre del mes para mostrar en el panel
+    const monthName = now.toLocaleString('es-ES', { month: 'long' })
+    const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
+
     return {
-      salesCount: sales.length,
-      salesTotal: totalAmount
+      salesCount: salesThisMonth.length,
+      salesTotal: totalAmount,
+      currentMonthName: capitalizedMonth
     }
   }, [sales])
 
@@ -65,39 +99,34 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Panel de acciones (ahora con datos reales) */}
         <div className="mt-4">
           <ControlPanel
-            salesCount={salesStats.salesCount}
-            salesTotal={salesStats.salesTotal}
+            salesCount={dashboardStats.salesCount}
+            salesTotal={dashboardStats.salesTotal}
+            currentMonthName={dashboardStats.currentMonthName}
             onCobrar={() => setOpenCrearFactura(true)}
             onCredito={() => setOpenCrearCredito(true)}
           />
         </div>
 
         <TopProducts />
-
-        {/* Vista previa de inventario (ahora con datos reales) */}
         <InventoryPreview items={inventory} />
       </div>
 
-      {/* Modales (ahora recargan los datos al cerrarse) */}
       <CreateInvoiceModal
         open={openCrearFactura}
         onClose={() => {
           setOpenCrearFactura(false)
-          fetchData() // Recarga todo el dashboard
+          fetchData()
         }}
-        // 'onCreate' ya no es necesario
       />
 
       <CreateCreditoFiscalModal
         open={openCrearCredito}
         onClose={() => {
           setOpenCrearCredito(false)
-          fetchData() // Recarga todo el dashboard
+          fetchData()
         }}
-        // 'onCreate' ya no es necesario
       />
     </main>
   )

@@ -19,7 +19,7 @@ const SidebarLink = ({ label, to, icon }) => (
     to={to}
     className={({ isActive }) =>
       `w-full flex items-center gap-3 px-4 py-2 rounded-xl text-sm cursor-pointer
-      ${isActive ? 'bg-emerald-100 text-emerald-800 font-semibold' : 'text-neutral-700 hover:bg-neutral-50'}`
+      ${isActive ? 'bg-[#Da2864]/20 text-[#Da2864] font-semibold' : 'text-neutral-700 hover:bg-neutral-50'}`
     }
   >
     <img src={icon} className="w-5 h-5" />

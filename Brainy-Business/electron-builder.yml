@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: AltavistaColors
+productName: Coquetos Inventario
 directories:
   buildResources: build
 files:
@@ -10,15 +10,15 @@ files:
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.MD,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
 
-# --- INICIO DE LA CORRECCIÓN ---
-# BORRA ESTA SECCIÓN COMPLETA
-# asarUnpack:
-#  - resources/**
-# --- FIN DE LA CORRECCIÓN ---
+extraResources:
+  - from: 'backend/'
+    to: 'backend/'
+    filter:
+      - '**/*'
 
 win:
   icon: build/icon.ico
-  executableName: AltavistaColors
+  executableName: Coquetos Inventario
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

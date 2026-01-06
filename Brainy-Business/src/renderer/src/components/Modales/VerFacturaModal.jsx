@@ -221,14 +221,14 @@ export default function VerFacturaModal({ open, onClose, data }) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600 shadow-sm"
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-[#11A5A3] shadow-sm"
           >
             Imprimir
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500 shadow-sm"
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-[#Da2864] shadow-sm"
           >
             Cerrar
           </button>

@@ -163,13 +163,13 @@ export default function VerCreditoFiscalModal({ open, onClose, data }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-5 print:hidden">
         <button
           onClick={() => window.print()}
-          className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600"
+          className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-[#11A5A3]"
         >
           Imprimir
         </button>
         <button
           onClick={onClose}
-          className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500"
+          className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-[#Da2864]"
         >
           Cancelar
         </button>

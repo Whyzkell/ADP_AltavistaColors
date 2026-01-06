@@ -2,6 +2,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { fetchProducts, createCreditoFiscal } from '../../api'
 
+// <--- URL para cargar las fotos
+const API_BASE = 'http://localhost:3001'
+
 /* ---------- Modal genérico ---------- */
 function Modal({ open, title, children, onClose }) {
   if (!open) return null
@@ -11,7 +14,7 @@ function Modal({ open, title, children, onClose }) {
       <div className="absolute inset-0 flex items-start justify-center pt-6 sm:pt-10 px-4 sm:px-6">
         <div className="w-full max-w-3xl bg-white rounded-2xl shadow-xl ring-1 ring-neutral-200">
           <div className="p-6 sm:p-8">
-            <h3 className="text-2xl font-bold text-black">Crear Crédito Fiscal</h3>
+            <h3 className="text-2xl font-bold text-black">{title}</h3>
             <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
             <div className="mt-6 max-h-[70vh] overflow-y-auto pr-1">{children}</div>
           </div>
@@ -39,13 +42,13 @@ const Input = ({ className = '', ...props }) => (
   />
 )
 
-const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0 }
+const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0, maxStock: null }
 
 /* =======================================================
     Modal COMPLETO de Crédito Fiscal
-    ======================================================= */
+   ======================================================= */
 export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
-  /* ------- Datos generales (keys que entiende el backend) ------- */
+  /* ------- Datos generales ------- */
   const [f, setF] = useState({
     cliente: '',
     direccion: '',
@@ -53,10 +56,10 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
     nrc: '',
     departamento: '',
     nit: '',
-    condiciones: '', // -> condiciones_op (lo mapea el backend)
-    notaAnterior: '', // -> nota_remision_ant
-    ventaCuentaDe: '', // -> venta_cuenta_de
-    fechaNotaAnterior: '', // -> fecha_remision_ant (YYYY-MM-DD recomendado)
+    condiciones: '',
+    notaAnterior: '',
+    ventaCuentaDe: '',
+    fechaNotaAnterior: '',
     entregadoPor: '',
     recibidoPor: '',
     duiEntregado: '',
@@ -69,21 +72,33 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
   const setProd = (i, k, v) =>
     setProds((arr) =>
-      arr.map((p, idx) =>
-        idx === i
-          ? {
-              ...p,
-              [k]: k === 'nombre' ? v : Number.isNaN(Number(v)) ? 0 : Number(v)
+      arr.map((p, idx) => {
+        if (idx !== i) return p
+
+        if (k === 'cant') {
+          let val = Number.isNaN(Number(v)) ? 0 : Number(v)
+
+          if (p.maxStock !== null && p.maxStock !== undefined) {
+            if (val > p.maxStock) {
+              alert(`¡Alto! Solo hay ${p.maxStock} unidades disponibles de "${p.nombre}".`)
+              val = p.maxStock
             }
-          : p
-      )
+          }
+          return { ...p, cant: val }
+        }
+
+        return {
+          ...p,
+          [k]: k === 'nombre' ? v : Number.isNaN(Number(v)) ? 0 : Number(v)
+        }
+      })
     )
 
   const addEmptyRow = () => setProds((p) => [...p, { ...emptyProd }])
   const removeRow = (i) => setProds((arr) => arr.filter((_, idx) => idx !== i))
   const totalFila = (p) => Number(p.cant || 0) * Number(p.precio || 0)
 
-  // Solo filas válidas (nombre no vacío, cant>0, precio>=0)
+  // Solo filas válidas
   const validProds = useMemo(
     () => prods.filter((p) => p?.nombre?.trim() && Number(p.cant) > 0 && Number(p.precio) >= 0),
     [prods]
@@ -106,6 +121,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         setBusy(true)
         const rows = await fetchProducts(text)
         const needle = text.toLowerCase()
+
         const mapped = (rows || [])
           .filter((r) => {
             const nombre = (r.nombre ?? '').toLowerCase()
@@ -118,8 +134,11 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
             nombre: r.nombre,
             precio: Number(r.precio ?? r.precio_unit ?? 0),
             codigo: r.codigo,
-            categoria: r.categoria
+            categoria: r.categoria,
+            existencias: Number(r.existencias ?? r.stock ?? r.cantidad ?? 999999),
+            imagen: r.imagen // <--- CAMBIO: Guardamos imagen
           }))
+
         if (alive) setResults(mapped.slice(0, 50))
       } catch (e) {
         console.error('fetchProducts(q) error:', e)
@@ -137,14 +156,38 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
   const addFromSearch = (item) => {
     setProds((arr) => {
       const idx = arr.findIndex((p) => p.pid && p.pid === item.pid)
+
       if (idx !== -1) {
         const copy = [...arr]
-        copy[idx] = { ...copy[idx], cant: Number(copy[idx].cant || 0) + 1 }
+        const currentCant = Number(copy[idx].cant || 0)
+
+        if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
+          alert(`No puedes agregar más. Solo hay ${item.existencias} en inventario.`)
+          return copy
+        }
+
+        copy[idx] = {
+          ...copy[idx],
+          cant: currentCant + 1,
+          maxStock: item.existencias
+        }
         return copy
       }
+
+      if (item.existencias <= 0) {
+        alert('Este producto no tiene existencias disponibles.')
+        return arr
+      }
+
       return [
         ...arr,
-        { pid: item.pid, cant: 1, nombre: item.nombre, precio: Number(item.precio || 0) }
+        {
+          pid: item.pid,
+          cant: 1,
+          nombre: item.nombre,
+          precio: Number(item.precio || 0),
+          maxStock: item.existencias
+        }
       ]
     })
     setQ('')
@@ -160,14 +203,13 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
     [sumas, iva13, ivaRetenido]
   )
 
-  /* ------- Submit (normaliza y envía) ------- */
+  /* ------- Submit ------- */
   const [submitting, setSubmitting] = useState(false)
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!f.cliente.trim()) return alert('Ingresa el cliente')
     if (!f.nit.trim()) return alert('Ingresa el NIT')
 
-    // normaliza productos para el backend
     const productos = validProds.map((p) => ({
       pid: p.pid ?? null,
       nombre: p.nombre.trim(),
@@ -193,13 +235,8 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
     try {
       setSubmitting(true)
-      // 1. LLAMA A LA API Y CREA EL CRÉDITO
-      await createCreditoFiscal(payload) // -> { id, numero, total }
+      await createCreditoFiscal(payload)
 
-      // 2. YA NO LLAMA A 'onCreate'. ESTA LÍNEA SE ELIMINA.
-      // onCreate?.(saved)
-
-      // 3. RESETEA LA UI DEL MODAL
       setF({
         cliente: '',
         direccion: '',
@@ -220,8 +257,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
       setQ('')
       setResults([])
       setIvaRetenido(0)
-
-      // 4. CIERRA EL MODAL
       onClose?.()
     } catch (e) {
       console.error(e)
@@ -345,6 +380,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                 {busy ? '…' : '🔍'}
               </button>
             </div>
+
             {results.length > 0 && (
               <div className="absolute z-10 mt-2 w-full max-h-56 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-lg">
                 {results.map((r) => (
@@ -352,16 +388,39 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                     key={r.pid}
                     type="button"
                     onClick={() => addFromSearch(r)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
                   >
-                    <span className="truncate">
-                      <span className="font-medium">{r.nombre}</span>
-                      {r.categoria ? (
-                        <span className="text-neutral-400"> • {r.categoria}</span>
-                      ) : null}
-                      {r.codigo ? <span className="text-neutral-400"> • {r.codigo}</span> : null}
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      {/* <--- CAMBIO: IMAGEN EN EL BUSCADOR */}
+                      <div className="h-9 w-9 rounded bg-neutral-100 flex-shrink-0 overflow-hidden border border-neutral-200">
+                        {r.imagen ? (
+                          <img
+                            src={`${API_BASE}/uploads/${r.imagen}`}
+                            className="h-full w-full object-cover"
+                            alt=""
+                            onError={(e) => (e.target.style.display = 'none')}
+                          />
+                        ) : (
+                          <span className="grid place-items-center h-full w-full text-[10px] text-neutral-400">
+                            📷
+                          </span>
+                        )}
+                      </div>
+
+                      <span className="truncate">
+                        <span className="font-medium">{r.nombre}</span>
+                        {r.categoria ? (
+                          <span className="text-neutral-400"> • {r.categoria}</span>
+                        ) : null}
+                        {r.codigo ? <span className="text-neutral-400"> • {r.codigo}</span> : null}
+                        <span className="text-xs text-blue-600 ml-2 font-bold">
+                          (Stock: {r.existencias})
+                        </span>
+                      </span>
+                    </div>
+                    <span className="ml-3 text-neutral-700 font-medium">
+                      ${Number(r.precio).toFixed(2)}
                     </span>
-                    <span className="ml-3 text-neutral-700">${Number(r.precio).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -385,17 +444,28 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                   type="number"
                   min="0"
                   step="1"
+                  max={p.maxStock || 9999}
+                  title={p.maxStock ? `Máximo disponible: ${p.maxStock}` : ''}
                   value={p.cant}
                   onChange={(e) => setProd(i, 'cant', e.target.value)}
                   placeholder="Cant."
                   className="col-span-2"
                 />
-                <Input
-                  value={p.nombre}
-                  onChange={(e) => setProd(i, 'nombre', e.target.value)}
-                  placeholder="Producto"
-                  className="col-span-6"
-                />
+
+                <div className="col-span-6 relative">
+                  <Input
+                    value={p.nombre}
+                    onChange={(e) => setProd(i, 'nombre', e.target.value)}
+                    placeholder="Producto"
+                    className="w-full"
+                  />
+                  {p.maxStock !== null && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400 bg-white px-1">
+                      Max: {p.maxStock}
+                    </span>
+                  )}
+                </div>
+
                 <Input
                   type="number"
                   min="0"
@@ -507,14 +577,14 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
           <button
             type="submit"
             disabled={submitting}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-emerald-600 disabled:opacity-60"
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-[#11A5A3] disabled:opacity-60"
           >
             {submitting ? 'Creando…' : 'Crear'}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-rose-500"
+            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-[#Da2864]"
           >
             Cancelar
           </button>

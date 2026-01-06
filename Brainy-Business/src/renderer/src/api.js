@@ -1,10 +1,11 @@
 // src/api.js
 import axios from 'axios'
 
-const BASE = 'http://localhost:3000'
+const API_PORT = 3001
+const BASE = `http://localhost:${API_PORT}`
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  baseURL: BASE
 })
 
 api.interceptors.request.use((config) => {
@@ -29,23 +30,42 @@ export async function fetchProducts(q = '') {
   return tryJson(txt)
 }
 
+// --- MODIFICADO: Soporte para FormData (Imágenes) ---
 export async function createProduct(data) {
+  const headers = authHeaders()
+
+  // Si enviamos un FormData (para subir foto), borramos el Content-Type
+  // para que el navegador lo configure automáticamente como multipart/form-data
+  if (data instanceof FormData) {
+    delete headers['Content-Type']
+  }
+
   const res = await fetch(`${BASE}/api/products`, {
     method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(data)
+    headers: headers,
+    // Si es FormData lo mandamos directo, si es objeto lo convertimos a JSON
+    body: data instanceof FormData ? data : JSON.stringify(data)
   })
+
   const txt = await res.text()
   if (!res.ok) throw new Error(tryJson(txt)?.error || txt || `HTTP ${res.status}`)
   return tryJson(txt)
 }
 
+// --- MODIFICADO: Soporte para FormData (Imágenes) ---
 export async function updateProduct(id, data) {
+  const headers = authHeaders()
+
+  if (data instanceof FormData) {
+    delete headers['Content-Type']
+  }
+
   const res = await fetch(`${BASE}/api/products/${id}`, {
     method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify(data)
+    headers: headers,
+    body: data instanceof FormData ? data : JSON.stringify(data)
   })
+
   if (!res.ok) throw new Error((await res.json()).error || 'Error actualizando producto')
   return res.json()
 }

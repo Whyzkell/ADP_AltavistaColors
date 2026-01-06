@@ -182,14 +182,14 @@ export default function Ventas() {
             <div className="mt-4 flex flex-wrap gap-4">
               <button
                 onClick={() => setOpenFactura(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold"
               >
                 <img src="resources/Factura.png" className="w-5 h-5" />
                 Factura
               </button>
               <button
                 onClick={() => setOpenCredito(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold"
               >
                 <img src="resources/CreditoFiscal.png" className="w-5 h-5" />
                 Crédito fiscal

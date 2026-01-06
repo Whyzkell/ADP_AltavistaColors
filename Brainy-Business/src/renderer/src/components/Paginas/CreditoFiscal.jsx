@@ -163,7 +163,7 @@ export default function CreditoFiscal() {
           </div>
           <button
             onClick={() => setOpenCrear(true)}
-            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-semibold"
+            className="bg-[#11A5A3] hover:bg-[#Da2864]  text-white px-4 py-2 rounded-xl text-sm font-semibold"
           >
             Agregar crédito
           </button>

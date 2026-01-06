@@ -47,12 +47,12 @@ export default function Login() {
               {/* Email — usamos el diseño pero con ids de la lógica */}
               <InputIconPlaceHolder
                 icon={FaUser}
-                placeholder="Email"
+                placeholder="Usuario"
                 id="email_usuario"
                 name="email_usuario"
                 value={formData.email_usuario}
                 onChange={handleChange}
-                type="email"
+                type="text"
                 required
               />
             </div>
@@ -85,7 +85,7 @@ export default function Login() {
       </div>
 
       {/* Lado derecho (gradiente y “cristal”) */}
-      <div className="hidden md:flex w-5/12 items-center justify-center bg-gradient-to-tr from-[#07A104]/55 to-[#07A104]/10">
+      <div className="hidden md:flex w-5/12 items-center justify-center bg-gradient-to-tr from-[#11A5A3]/55 to-[#07A104]/10">
         <div className="flex justify-center items-center  w-3/4 h-3/4 rounded-3xl bg-white/20 bg-opacity-20 backdrop-blur-lg border border-white/30 shadow-lg">
           <img src={Logito} className="w-10/12 " />
         </div>

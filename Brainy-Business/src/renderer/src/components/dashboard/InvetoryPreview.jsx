@@ -2,6 +2,7 @@ import React from 'react'
 import Card from '../Cards/Card.jsx'
 import Pill from '../ui/Pill.jsx'
 import Button from '../Buttons/Button.jsx'
+import { NavLink } from 'react-router-dom'
 
 export default function InventoryPreview({ items = [] }) {
   return (
@@ -11,9 +12,9 @@ export default function InventoryPreview({ items = [] }) {
           <h2 className="text-lg font-semibold text-black">Inventario</h2>
           <p className="text-sm text-neutral-500">Inventario de productos</p>
         </div>
-        <a href="/Inventario">
+        <NavLink to="/Inventario">
           <Button variant="soft">Ver</Button>
-        </a>
+        </NavLink>
       </div>
 
       <div className="mt-4 hidden lg:grid grid-cols-12 text-xs text-neutral-500 px-2">
