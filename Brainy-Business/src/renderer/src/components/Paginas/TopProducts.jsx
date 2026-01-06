@@ -35,12 +35,12 @@ export default function TopProducts() {
         Top 10 productos por unidades vendidas (incluye Facturas y Créditos Fiscales)
       </p>
 
-      {/* Encabezados */}
+      {/* Encabezados - GRID AJUSTADO (12 columnas) */}
       <div className="mt-4 hidden lg:grid grid-cols-12 text-xs font-semibold text-neutral-600 px-4 py-2 bg-neutral-100 rounded-lg gap-2">
         <div className="col-span-1">#</div>
-        <div className="col-span-1">Imagen</div> {/* Nueva columna */}
-        <div className="col-span-3">Nombre</div>
-        <div className="col-span-2">Código</div>
+        <div className="col-span-1">Imagen</div>
+        {/* Aumentamos 'Nombre' de 3 a 5 espacios al quitar Código */}
+        <div className="col-span-5">Nombre</div>
         <div className="col-span-3 text-right">Unidades Vendidas</div>
         <div className="col-span-2 text-right">Valor Total</div>
       </div>
@@ -66,7 +66,7 @@ export default function TopProducts() {
                 {index + 1}
               </div>
 
-              {/* Imagen (Oculta en móvil, visible en escritorio) */}
+              {/* Imagen */}
               <div className="hidden lg:block lg:col-span-1">
                 <div className="h-10 w-10 rounded-lg bg-neutral-50 ring-1 ring-neutral-100 flex items-center justify-center overflow-hidden">
                   {p.imagen ? (
@@ -82,18 +82,15 @@ export default function TopProducts() {
                 </div>
               </div>
 
-              {/* Nombre (En móvil ocupa ancho completo si es necesario) */}
+              {/* Nombre - Ahora ocupa 5 columnas */}
               <div
-                className="col-span-2 lg:col-span-3 text-sm font-medium text-black truncate"
+                className="col-span-2 lg:col-span-5 text-sm font-medium text-black truncate"
                 title={p.nombre}
               >
                 {p.nombre}
               </div>
 
-              {/* Código */}
-              <div className="hidden lg:block lg:col-span-2 text-sm font-mono text-neutral-500">
-                {p.codigo || '—'}
-              </div>
+              {/* CÓDIGO ELIMINADO AQUÍ */}
 
               {/* Unidades */}
               <div className="col-span-1 lg:col-span-3 text-sm text-right font-semibold text-black">

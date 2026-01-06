@@ -26,10 +26,27 @@ export default function Dashboard() {
 
       setInventory(products || [])
 
-      const allSales = [
-        ...(invoices.map((f) => ({ ...f, tipo: 'Factura' })) || []),
-        ...(credits.map((c) => ({ ...c, tipo: 'Crédito Fiscal' })) || [])
-      ]
+      // --- AQUÍ ESTABA EL ERROR ---
+      // En Ventas.jsx normalizamos los datos, aquí también debemos hacerlo
+      // para asegurar que 'fecha' y 'monto' siempre existan.
+
+      const mappedInvoices = (invoices || []).map((f) => ({
+        ...f,
+        tipo: 'Factura',
+        // Si la API trae 'fecha_emision', lo guardamos como 'fecha'
+        fecha: f.fecha_emision || f.fecha,
+        // Si la API trae 'total', lo guardamos como 'monto'
+        monto: f.total || f.monto
+      }))
+
+      const mappedCredits = (credits || []).map((c) => ({
+        ...c,
+        tipo: 'Crédito Fiscal',
+        fecha: c.fecha_emision || c.fecha,
+        monto: c.total || c.monto
+      }))
+
+      const allSales = [...mappedInvoices, ...mappedCredits]
       setSales(allSales)
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
@@ -43,42 +60,28 @@ export default function Dashboard() {
     fetchData()
   }, [])
 
-  // --- LÓGICA CORREGIDA: COMPARACIÓN NUMÉRICA UTC ---
+  // --- LÓGICA DE FILTRADO (Igual que en Ventas.jsx) ---
   const dashboardStats = useMemo(() => {
-    // 1. Obtenemos mes y año actuales de tu computadora
     const now = new Date()
-    const currentYear = now.getFullYear()
-    const currentMonth = now.getMonth() // 0 = Enero, 1 = Febrero...
-
-    // console.log("Buscando ventas del mes:", currentMonth + 1, "del año:", currentYear)
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth() // 0 = Enero
 
     const salesThisMonth = sales.filter((venta) => {
+      // Ahora 'venta.fecha' seguro existe gracias al mapeo de arriba
       if (!venta.fecha) return false
 
-      // Convertimos la fecha de la venta a objeto Date asegurándonos
-      const fechaVenta = new Date(venta.fecha)
+      const ventaDate = new Date(venta.fecha)
 
-      // Verificamos que sea una fecha válida
-      if (isNaN(fechaVenta.getTime())) return false
-
-      // TRUCO MAESTRO: Usamos getUTCFullYear y getUTCMonth.
-      // Esto lee la fecha "cruda" de la base de datos (2026-01-06)
-      // sin restarle horas por la zona horaria de El Salvador.
-      const ventaYear = fechaVenta.getUTCFullYear()
-      const ventaMonth = fechaVenta.getUTCMonth()
-
-      // Comparamos números: Año igual al actual Y Mes igual al actual
-      return ventaYear === currentYear && ventaMonth === currentMonth
+      // Filtramos usando UTC
+      return ventaDate.getUTCFullYear() === currentYear && ventaDate.getUTCMonth() === currentMonth
     })
 
-    // 2. Sumamos los montos
     const totalAmount = salesThisMonth.reduce((acc, venta) => {
-      // Postgres devuelve 'numeric' a veces como string, aseguramos con Number()
-      const valorVenta = Number(venta.monto) || Number(venta.total) || 0
+      // Ahora 'venta.monto' seguro existe
+      const valorVenta = Number(venta.monto || 0)
       return acc + valorVenta
     }, 0)
 
-    // 3. Nombre del mes para mostrar en el panel
     const monthName = now.toLocaleString('es-ES', { month: 'long' })
     const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
 

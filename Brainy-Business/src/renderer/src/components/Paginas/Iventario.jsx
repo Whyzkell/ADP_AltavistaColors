@@ -7,7 +7,7 @@ const API_BASE = 'http://localhost:3001'
 
 /* ========= Helpers ========= */
 const mapRow = (r) => {
-  // CORRECCIÓN CRÍTICA: Aseguramos que el ID exista
+  // Aseguramos que el ID exista
   const realId = r.id || r.id_producto
 
   return {
@@ -16,14 +16,13 @@ const mapRow = (r) => {
     nombre: r.nombre,
     categoria: r.categoria,
     precio: Number(r.precio ?? r.precio_unit),
-    codigo: r.codigo,
+    codigo: r.codigo, // Lo mantenemos en memoria pero no lo mostramos
     existencias: Number(r.existencias || 0),
-    // Construimos la URL completa de la imagen si existe
     imagenUrl: r.imagen ? `${API_BASE}/uploads/${r.imagen}` : null
   }
 }
 
-// --- ESTE ES EL COMPONENTE QUE FALTABA (Pill) ---
+// Componente Pill (Estado del stock)
 const Pill = ({ value }) => {
   const num = Number(value)
   const intent =
@@ -36,12 +35,11 @@ const Pill = ({ value }) => {
   return <span className={`px-3 py-1 rounded-full text-xs font-semibold ${intent}`}>{value}</span>
 }
 
-// Componente simple para mostrar la imagen en la tabla
+// Componente para imagen
 const ProductImage = ({ src, alt }) => {
   const [error, setError] = useState(false)
 
   if (!src || error) {
-    // Placeholder si no hay imagen o falla
     return (
       <div className="h-10 w-10 rounded-lg bg-neutral-100 ring-1 ring-neutral-200 flex items-center justify-center text-neutral-400">
         <svg
@@ -150,13 +148,11 @@ export default function Iventario() {
     })()
   }, [])
 
+  // Filtro actualizado (Sin código)
   const filtered = useMemo(
     () =>
       productos.filter((p) =>
-        [p.nombre, p.categoria, String(p.codigo)]
-          .join(' ')
-          .toLowerCase()
-          .includes(query.toLowerCase())
+        [p.nombre, p.categoria].join(' ').toLowerCase().includes(query.toLowerCase())
       ),
     [productos, query]
   )
@@ -185,7 +181,8 @@ export default function Iventario() {
     formData.append('nombre', nuevo.nombre.trim())
     formData.append('categoria', nuevo.categoria.trim())
     formData.append('precio', nuevo.precio)
-    formData.append('codigo', nuevo.codigo)
+    // Enviamos código por defecto '0000' ya que el input está oculto
+    formData.append('codigo', nuevo.codigo || '0000')
     formData.append('existencias', nuevo.existencias || 0)
 
     if (nuevoFile) {
@@ -217,7 +214,6 @@ export default function Iventario() {
   const [editFile, setEditFile] = useState(null)
 
   const onEditRow = (row) => {
-    console.log('Editando fila:', row) // Debug para verificar ID
     setEditForm({
       id: row.id,
       idStr: row.idStr,
@@ -247,6 +243,7 @@ export default function Iventario() {
       formData.append('nombre', editForm.nombre.trim())
       formData.append('categoria', editForm.categoria.trim())
       formData.append('precio', editForm.precio)
+      // Mantenemos el código original oculto
       formData.append('codigo', editForm.codigo)
       formData.append('existencias', editForm.existencias)
 
@@ -275,7 +272,7 @@ export default function Iventario() {
   }
 
   return (
-    <main className="flex-1 p-6">
+    <main className="flex-1 p-4">
       <div className="max-w-7xl mx-auto">
         <div>
           <h1 className="text-xl font-semibold text-black">Inventario</h1>
@@ -287,7 +284,7 @@ export default function Iventario() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar..."
+              placeholder="Buscar por nombre..."
               className="outline-none text-sm bg-transparent w-full"
             />
             <span className="text-neutral-400">🔍</span>
@@ -312,7 +309,7 @@ export default function Iventario() {
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Categoría</th>
                 <th className="px-4 py-3">Precio</th>
-                <th className="px-4 py-3">Código</th>
+                {/* Columna código eliminada */}
                 <th className="px-4 py-3">Existencias</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
@@ -327,7 +324,7 @@ export default function Iventario() {
                   <td className="px-4 py-3 font-medium text-neutral-900">{p.nombre}</td>
                   <td className="px-4 py-3">{p.categoria}</td>
                   <td className="px-4 py-3">${Number(p.precio).toFixed(2)}</td>
-                  <td className="px-4 py-3">{p.codigo}</td>
+                  {/* Celda código eliminada */}
                   <td className="px-4 py-3">
                     <Pill value={p.existencias} />
                   </td>
@@ -348,7 +345,7 @@ export default function Iventario() {
               ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan="8" className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan="7" className="px-4 py-6 text-center text-neutral-400">
                     No se encontraron productos
                   </td>
                 </tr>
@@ -415,17 +412,7 @@ export default function Iventario() {
                 required
               />
             </Field>
-            <Field label="Código">
-              <InputGreen
-                id="codigo"
-                type="number"
-                min="1"
-                step="1"
-                value={nuevo.codigo}
-                onChange={onChangeNew}
-                required
-              />
-            </Field>
+            {/* Input Código eliminado */}
             <Field label="Existencias">
               <InputGreen
                 id="existencias"
@@ -524,17 +511,7 @@ export default function Iventario() {
                 required
               />
             </Field>
-            <Field label="Código">
-              <InputGreen
-                id="codigo"
-                type="number"
-                min="1"
-                step="1"
-                value={editForm.codigo}
-                onChange={onChangeEdit}
-                required
-              />
-            </Field>
+            {/* Input Código eliminado */}
             <Field label="Existencias">
               <InputGreen
                 id="existencias"

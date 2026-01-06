@@ -17,7 +17,7 @@ function App() {
         <Topbar title="Inicio" />
         <div className=" mx-auto flex">
           <Sidebar />
-          <main className="flex-1 ml-64 p-6">
+          <main className="flex-1 ml-64 p-4">
             <Dashboard />
           </main>
         </div>
