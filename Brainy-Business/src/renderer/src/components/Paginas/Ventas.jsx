@@ -323,7 +323,14 @@ export default function Ventas() {
                 ${monthStats.tarjeta.toFixed(2)}
               </p>
             </div>
+            <div>
+                <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito - Comisión</p>
+                <p className="text-lg font-semibold text-purple-600">
+                  ${(monthStats.tarjeta.toFixed(2) - (monthStats.tarjeta * .04).toFixed(2)).toFixed(2)}
+                </p>
+              </div>
           </div>
+          
         </div>
 
         {/* TABLA DE VENTAS */}

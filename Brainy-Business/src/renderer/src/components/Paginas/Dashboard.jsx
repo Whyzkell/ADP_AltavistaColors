@@ -163,6 +163,12 @@ export default function Dashboard() {
                   ${dashboardStats.tarjeta.toFixed(2)}
                 </p>
               </div>
+              <div>
+                <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito - Comisión</p>
+                <p className="text-lg font-semibold text-purple-600">
+                  ${(dashboardStats.tarjeta.toFixed(2) - (dashboardStats.tarjeta * .04).toFixed(2)).toFixed(2)}
+                </p>
+              </div>
             </div>
           </div>
         </div>
