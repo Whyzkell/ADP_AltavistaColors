@@ -1,7 +1,7 @@
 // src/renderer/src/components/Modales/CreateCreditoFiscalModal.jsx
 import React, { useEffect, useMemo, useState } from 'react'
 import { fetchProducts, createCreditoFiscal } from '../../api'
-import Swal from 'sweetalert2' // <--- IMPORTAMOS SWAL
+import Swal from 'sweetalert2'
 
 // <--- URL para cargar las fotos
 const API_BASE = 'http://localhost:3001'
@@ -43,6 +43,19 @@ const Input = ({ className = '', ...props }) => (
   />
 )
 
+// --- NUEVO HELPER PARA SELECT (Estilo Morado) ---
+const Select = ({ className = '', children, ...props }) => (
+  <select
+    {...props}
+    className={
+      'w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-purple-50/40 text-neutral-800 outline-none appearance-none ' +
+      className
+    }
+  >
+    {children}
+  </select>
+)
+
 const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0, maxStock: null }
 
 /* =======================================================
@@ -64,7 +77,8 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
     entregadoPor: '',
     recibidoPor: '',
     duiEntregado: '',
-    duiRecibido: ''
+    duiRecibido: '',
+    tipo_de_pago: 'Efectivo' // <--- 1. NUEVO CAMPO DEFAULT
   })
   const up = (k, v) => setF((s) => ({ ...s, [k]: v }))
 
@@ -81,7 +95,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
 
           if (p.maxStock !== null && p.maxStock !== undefined) {
             if (val > p.maxStock) {
-              // REEMPLAZO 1: Alerta de stock manual
               Swal.fire({
                 icon: 'warning',
                 title: 'Stock Alcanzado',
@@ -169,7 +182,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         const currentCant = Number(copy[idx].cant || 0)
 
         if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
-          // REEMPLAZO 2: Alerta de stock buscador
           Swal.fire({
             icon: 'warning',
             title: 'Límite de Stock',
@@ -188,7 +200,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
       }
 
       if (item.existencias <= 0) {
-        // REEMPLAZO 3: Producto agotado
         Swal.fire({
           icon: 'error',
           title: '¡Agotado!',
@@ -228,7 +239,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    // REEMPLAZO 4: Validaciones del formulario
     if (!f.cliente.trim()) {
       return Swal.fire({
         icon: 'warning',
@@ -263,7 +273,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
     }
 
     const payload = {
-      ...f,
+      ...f, // Esto incluye f.tipo_de_pago automáticamente
       productos,
       resumen: {
         sumas: +sumas.toFixed(2),
@@ -278,7 +288,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
       setSubmitting(true)
       const saved = await createCreditoFiscal(payload)
 
-      // Mensaje de éxito opcional (se muestra antes de cerrar)
       Swal.fire({
         icon: 'success',
         title: 'Crédito Fiscal Creado',
@@ -302,7 +311,8 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
         entregadoPor: '',
         recibidoPor: '',
         duiEntregado: '',
-        duiRecibido: ''
+        duiRecibido: '',
+        tipo_de_pago: 'Efectivo' // Resetear a efectivo
       })
       setProds([{ ...emptyProd }])
       setQ('')
@@ -332,7 +342,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               value={f.cliente}
               onChange={(e) => up('cliente', e.target.value)}
               placeholder="Cliente a facturar"
-              required // HTML validation como backup
+              required
             />
           </Field>
           <Field label="Dirección">
@@ -390,12 +400,13 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               placeholder="Condiciones de operación"
             />
           </Field>
-          <Field label="No. Nota Remisión anterior">
-            <Input
-              value={f.notaAnterior}
-              onChange={(e) => up('notaAnterior', e.target.value)}
-              placeholder="Número de nota de remisión anterior"
-            />
+          {/* --- 2. SELECTOR DE TIPO DE PAGO --- */}
+          <Field label="Tipo de Pago">
+            <Select value={f.tipo_de_pago} onChange={(e) => up('tipo_de_pago', e.target.value)}>
+              <option value="Efectivo">Efectivo</option>
+              <option value="Transferencia">Transferencia</option>
+              <option value="Tarjeta de credito">Tarjeta de Crédito</option>
+            </Select>
           </Field>
         </div>
 
@@ -408,6 +419,17 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               placeholder="Venta a cuenta de"
             />
           </Field>
+          <Field label="No. Nota Remisión anterior">
+            <Input
+              value={f.notaAnterior}
+              onChange={(e) => up('notaAnterior', e.target.value)}
+              placeholder="Número nota anterior"
+            />
+          </Field>
+        </div>
+
+        {/* ====== Fila 6 ====== */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Fecha Nota Remisión anterior">
             <Input
               value={f.fechaNotaAnterior}
@@ -415,13 +437,14 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               placeholder="YYYY-MM-DD"
             />
           </Field>
+          {/* Espacio vacío para balancear */}
+          <div className="hidden sm:block" />
         </div>
 
         {/* ====== Productos ====== */}
         <div>
           <p className="text-sm font-semibold text-black">Productos</p>
 
-          {/* Buscador con sugerencias */}
           <div className="relative mt-2">
             <div className="flex items-center gap-2">
               <Input
@@ -447,7 +470,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                     className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                      {/* IMAGEN EN EL BUSCADOR */}
                       <div className="h-9 w-9 rounded bg-neutral-100 flex-shrink-0 overflow-hidden border border-neutral-200">
                         {r.imagen ? (
                           <img
@@ -462,13 +484,11 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                           </span>
                         )}
                       </div>
-
                       <span className="truncate">
                         <span className="font-medium">{r.nombre}</span>
                         {r.categoria ? (
                           <span className="text-neutral-400"> • {r.categoria}</span>
                         ) : null}
-                        {r.codigo ? <span className="text-neutral-400"> • {r.codigo}</span> : null}
                         <span className="text-xs text-blue-600 ml-2 font-bold">
                           (Stock: {r.existencias})
                         </span>
@@ -507,7 +527,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                   placeholder="Cant."
                   className="col-span-2"
                 />
-
                 <div className="col-span-6 relative">
                   <Input
                     value={p.nombre}
@@ -521,7 +540,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
                     </span>
                   )}
                 </div>
-
                 <Input
                   type="number"
                   min="0"
@@ -587,7 +605,6 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
           </div>
         </div>
 
-        {/* Nota */}
         <p className="text-[13px] text-neutral-600">
           Llenar si la operación es superior a <b>$11,428.58</b>
         </p>
@@ -599,7 +616,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               <Input
                 value={f.entregadoPor}
                 onChange={(e) => up('entregadoPor', e.target.value)}
-                placeholder="Nombre de la persona que entrega"
+                placeholder="Nombre"
               />
             </Field>
             <Field label="DUI o NIT">
@@ -615,7 +632,7 @@ export default function CreateCreditoFiscalModal({ open, onClose, onCreate }) {
               <Input
                 value={f.recibidoPor}
                 onChange={(e) => up('recibidoPor', e.target.value)}
-                placeholder="Nombre de la persona que recibe"
+                placeholder="Nombre"
               />
             </Field>
             <Field label="DUI o NIT">

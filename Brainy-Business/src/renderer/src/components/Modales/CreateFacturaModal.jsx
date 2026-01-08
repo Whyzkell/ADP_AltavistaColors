@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import ModalFactura from './ModalFactura.jsx'
 import { fetchProducts, createInvoice } from '../../api'
-import Swal from 'sweetalert2' // <--- IMPORTANTE: Importamos SweetAlert2
+import Swal from 'sweetalert2'
 
 // <--- URL para cargar las fotos
 const API_BASE = 'http://localhost:3001'
@@ -17,7 +17,8 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     ventaCuentaDe: '',
     dui: '',
     condiciones: '',
-    nit: ''
+    nit: '',
+    tipo_de_pago: 'Efectivo' // <--- NUEVO CAMPO POR DEFECTO
   })
   const up = (k, v) => setF((s) => ({ ...s, [k]: v }))
 
@@ -34,7 +35,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
           if (p.maxStock !== null && p.maxStock !== undefined) {
             if (val > p.maxStock) {
-              // REEMPLAZO 1: Alerta de stock manual
               Swal.fire({
                 icon: 'warning',
                 title: 'Stock Alcanzado',
@@ -91,7 +91,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         setBusy(true)
         const rows = await fetchProducts(text)
 
-        // Filtro local
         const needle = text.toLowerCase()
         const local = rows.filter((r) => {
           const nombre = (r.nombre ?? '').toLowerCase()
@@ -134,7 +133,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         const currentCant = Number(copy[idx].cant || 0)
 
         if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
-          // REEMPLAZO 2: Alerta de stock al sumar desde buscador
           Swal.fire({
             icon: 'warning',
             title: 'Límite de Stock',
@@ -153,7 +151,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       }
 
       if (item.existencias <= 0) {
-        // REEMPLAZO 3: Alerta de producto agotado
         Swal.fire({
           icon: 'error',
           title: '¡Agotado!',
@@ -185,7 +182,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    // REEMPLAZO 4: Validaciones del formulario
     if (!f.cliente.trim()) {
       return Swal.fire({
         icon: 'warning',
@@ -213,13 +209,22 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         nit: f.nit.trim(),
         condiciones: f.condiciones.trim(),
         ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
+        tipo_de_pago: f.tipo_de_pago, // <--- ENVIAMOS EL TIPO DE PAGO AL BACKEND
         productos: prods
       })
 
       onCreate?.(saved)
 
       // Limpiamos todo
-      setF({ cliente: '', direccion: '', ventaCuentaDe: '', dui: '', condiciones: '', nit: '' })
+      setF({
+        cliente: '',
+        direccion: '',
+        ventaCuentaDe: '',
+        dui: '',
+        condiciones: '',
+        nit: '',
+        tipo_de_pago: 'Efectivo' // <--- Resetear a efectivo
+      })
       setProds([{ ...emptyProd }])
       setQ('')
       setResults([])
@@ -477,6 +482,24 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
             </button>
           </section>
 
+          <section className="snap-start mt-8 pb-2">
+            <LabelSection>Tipo de pago</LabelSection>
+            {/* --- NUEVO CAMPO: TIPO DE PAGO --- */}
+            <div className="mb-3"></div>
+            <Field>
+              <SelectGreen
+                value={f.tipo_de_pago}
+                onChange={(e) => up('tipo_de_pago', e.target.value)}
+              >
+                <option value="Efectivo">Efectivo</option>
+                <option value="Transferencia">Transferencia</option>
+                {/* IMPORTANTE: El valor debe ser exacto al de la base de datos (sin acento en credito) */}
+                <option value="Tarjeta de credito">Tarjeta de Crédito</option>
+              </SelectGreen>
+            </Field>
+            {/* ---------------------------------- */}
+          </section>
+
           {/* Resumen */}
           <section className="snap-start mt-8 pb-2">
             <LabelSection>Resumen</LabelSection>
@@ -541,6 +564,21 @@ function InputGreen({ className = '', ...props }) {
         className
       }
     />
+  )
+}
+
+// Nuevo Helper para el Select con el mismo estilo que InputGreen
+function SelectGreen({ className = '', children, ...props }) {
+  return (
+    <select
+      {...props}
+      className={
+        'h-11 w-full rounded-xl px-3 ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none appearance-none mt-4' +
+        className
+      }
+    >
+      {children}
+    </select>
   )
 }
 

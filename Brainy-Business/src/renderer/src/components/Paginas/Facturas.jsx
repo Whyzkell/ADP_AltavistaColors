@@ -12,10 +12,30 @@ const PillMoney = ({ value }) => (
   </span>
 )
 
+// --- NUEVO COMPONENTE PARA EL TIPO DE PAGO ---
+const PillPago = ({ value }) => {
+  const tipo = (value || 'Efectivo').toLowerCase()
+
+  let styles = 'bg-emerald-50 text-emerald-700 ring-emerald-200' // Efectivo (Default)
+  let label = value || 'Efectivo'
+
+  if (tipo.includes('tarjeta')) {
+    styles = 'bg-purple-50 text-purple-700 ring-purple-200'
+    label = 'Tarjeta'
+  } else if (tipo.includes('transferencia')) {
+    styles = 'bg-blue-50 text-blue-700 ring-blue-200'
+  }
+
+  return (
+    <span className={`px-2 py-1 rounded-md text-xs font-medium ring-1 ${styles}`}>{label}</span>
+  )
+}
+
 function fmtFecha(d) {
   if (!d) return '—'
   try {
-    return new Date(d).toLocaleDateString('es-SV')
+    // Usamos UTC para evitar problemas de zona horaria si la BD lo guarda así
+    return new Date(d).toLocaleDateString('es-SV', { timeZone: 'UTC' })
   } catch {
     return String(d)
   }
@@ -28,11 +48,11 @@ function mapRow(r) {
     cliente: r.cliente,
     fecha: fmtFecha(r.fecha_emision || r.fecha),
     direccion: r.direccion || '—',
-    total: Number(r.total || 0)
+    total: Number(r.total || 0),
+    tipo_de_pago: r.tipo_de_pago // <--- AGREGAMOS EL CAMPO AL MAPEO
   }
 }
 
-// --- MENÚ CORREGIDO (Igual que en Inventario) ---
 const Menu = ({ onView, onDelete }) => (
   <div className="absolute right-0 mt-1 w-32 bg-white rounded-xl shadow-lg ring-1 ring-neutral-200 py-2 z-20">
     <button
@@ -56,13 +76,9 @@ const Menu = ({ onView, onDelete }) => (
    ===================================================== */
 export default function Facturas() {
   const [query, setQuery] = useState('')
-
-  // Usamos un estado simple para saber qué ID tiene el menú abierto
   const [openMenuId, setOpenMenuId] = useState(null)
-
   const [openCrear, setOpenCrear] = useState(false)
   const [detalle, setDetalle] = useState(null)
-
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
 
@@ -91,36 +107,40 @@ export default function Facturas() {
     const q = query.trim().toLowerCase()
     if (!q) return items
     return items.filter((r) =>
-      [r.numero, r.cliente, r.direccion].join(' ').toLowerCase().includes(q)
+      [r.numero, r.cliente, r.direccion, r.tipo_de_pago].join(' ').toLowerCase().includes(q)
     )
   }, [items, query])
 
   const handleCreate = async (saved) => {
     try {
       const full = await getInvoice(saved.id)
-      const row = mapRow(full) // <--- Aquí 'row' ya tiene el número bien formateado (#00025)
+      const row = mapRow(full)
       setItems((arr) => [row, ...arr])
 
       Swal.fire({
         icon: 'success',
         title: 'Factura creada',
-        // CORRECCIÓN: Usamos row.numero en lugar de saved.numero
         text: `La factura ${row.numero} se ha guardado correctamente.`,
         timer: 2000,
         showConfirmButton: false
       })
     } catch (e) {
+      // Fallback si falla el getInvoice
       setItems((arr) => [
-        mapRow({ id: saved.id, numero: saved.numero, cliente: '—', total: saved.total }),
+        mapRow({
+          id: saved.id,
+          numero: saved.numero,
+          cliente: '—',
+          total: saved.total,
+          tipo_de_pago: saved.tipo_de_pago
+        }),
         ...arr
       ])
     }
   }
 
   const verDetalles = async (row) => {
-    // Cerramos el menú
     setOpenMenuId(null)
-
     try {
       const full = await getInvoice(row.id)
       setDetalle({
@@ -141,7 +161,6 @@ export default function Facturas() {
   }
 
   const eliminar = async (row) => {
-    // Cerramos el menú
     setOpenMenuId(null)
 
     const result = await Swal.fire({
@@ -208,15 +227,14 @@ export default function Facturas() {
         </div>
 
         <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 mb-8 overflow-visible">
-          {/* Nota: overflow-visible es importante si el menú sale de la tabla, 
-              pero con el menú inline suele funcionar bien con overflow-x-auto también */}
-
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left text-neutral-600">
               <tr>
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Cliente</th>
                 <th className="px-4 py-3">Fecha</th>
+                {/* Nueva Columna */}
+                <th className="px-4 py-3">Pago</th>
                 <th className="px-4 py-3">Dirección</th>
                 <th className="px-4 py-3">Venta dólares</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
@@ -225,7 +243,7 @@ export default function Facturas() {
             <tbody className="divide-y divide-neutral-200">
               {loading && (
                 <tr>
-                  <td colSpan="6" className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan="7" className="px-4 py-6 text-center text-neutral-400">
                     Cargando…
                   </td>
                 </tr>
@@ -235,14 +253,24 @@ export default function Facturas() {
                 filtered.map((r) => (
                   <tr key={r.id} className="relative group hover:bg-neutral-50/50">
                     <td className="px-4 py-3 font-mono text-neutral-600">{r.numero}</td>
-                    <td className="px-4 py-3">{r.cliente}</td>
+                    <td className="px-4 py-3 font-medium text-neutral-900">{r.cliente}</td>
                     <td className="px-4 py-3">{r.fecha}</td>
-                    <td className="px-4 py-3">{r.direccion}</td>
+
+                    {/* Nueva Celda con el Pill */}
+                    <td className="px-4 py-3">
+                      <PillPago value={r.tipo_de_pago} />
+                    </td>
+
+                    <td
+                      className="px-4 py-3 text-neutral-500 max-w-xs truncate"
+                      title={r.direccion}
+                    >
+                      {r.direccion}
+                    </td>
                     <td className="px-4 py-3">
                       <PillMoney value={r.total} />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {/* LÓGICA DEL MENÚ CORREGIDA */}
                       <div className="relative inline-block text-left">
                         <button
                           onClick={() => setOpenMenuId(openMenuId === r.id ? null : r.id)}
@@ -261,7 +289,7 @@ export default function Facturas() {
 
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan="7" className="px-4 py-6 text-center text-neutral-400">
                     No se encontraron facturas
                   </td>
                 </tr>

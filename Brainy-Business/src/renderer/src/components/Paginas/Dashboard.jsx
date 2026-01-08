@@ -5,7 +5,8 @@ import CreateInvoiceModal from '../Modales/CreateFacturaModal.jsx'
 import CreateCreditoFiscalModal from '../Modales/CreateCreditoFiscalModal.jsx'
 import { fetchProducts, listInvoices, listFiscalCredits } from '../../api'
 import TopProducts from './TopProducts.jsx'
-import Swal from 'sweetalert2' // <--- 1. IMPORTAMOS SWAL
+import ProductosProxAgotar from './ProductosProxAgotar.jsx'
+import Swal from 'sweetalert2'
 
 export default function Dashboard() {
   const [openCrearFactura, setOpenCrearFactura] = useState(false)
@@ -31,21 +32,22 @@ export default function Dashboard() {
         ...f,
         tipo: 'Factura',
         fecha: f.fecha_emision || f.fecha,
-        monto: f.total || f.monto
+        monto: f.total || f.monto,
+        tipo_de_pago: f.tipo_de_pago // <--- AGREGADO
       }))
 
       const mappedCredits = (credits || []).map((c) => ({
         ...c,
         tipo: 'Crédito Fiscal',
         fecha: c.fecha_emision || c.fecha,
-        monto: c.total || c.monto
+        monto: c.total || c.monto,
+        tipo_de_pago: c.tipo_de_pago // <--- AGREGADO
       }))
 
       const allSales = [...mappedInvoices, ...mappedCredits]
       setSales(allSales)
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
-      // Reemplazamos el alert nativo por uno bonito si falla la carga inicial
       Swal.fire({
         icon: 'error',
         title: 'Error',
@@ -61,12 +63,9 @@ export default function Dashboard() {
     fetchData()
   }, [])
 
-  // 2. FUNCIÓN PARA MANEJAR EL ÉXITO DE FACTURA
   const handleCreateFactura = async () => {
-    await fetchData() // Recargamos los datos del dashboard
-    setOpenCrearFactura(false) // Cerramos el modal
-
-    // Mostramos la alerta bonita
+    await fetchData()
+    setOpenCrearFactura(false)
     Swal.fire({
       icon: 'success',
       title: 'Factura Creada',
@@ -76,23 +75,39 @@ export default function Dashboard() {
     })
   }
 
-  // --- LÓGICA DE FILTRADO ---
+  // --- LÓGICA DE FILTRADO Y CÁLCULO ---
   const dashboardStats = useMemo(() => {
     const now = new Date()
     const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth() // 0 = Enero
+    const currentMonth = now.getUTCMonth()
 
     const salesThisMonth = sales.filter((venta) => {
       if (!venta.fecha) return false
       const ventaDate = new Date(venta.fecha)
-      // Filtramos usando UTC
       return ventaDate.getUTCFullYear() === currentYear && ventaDate.getUTCMonth() === currentMonth
     })
 
-    const totalAmount = salesThisMonth.reduce((acc, venta) => {
-      const valorVenta = Number(venta.monto || 0)
-      return acc + valorVenta
-    }, 0)
+    // Inicializamos contadores
+    let totalAmount = 0
+    let totalEfectivo = 0
+    let totalTransferencia = 0
+    let totalTarjeta = 0
+
+    // Sumar montos
+    salesThisMonth.forEach((venta) => {
+      const monto = Number(venta.monto || 0)
+      const tipoPago = (venta.tipo_de_pago || 'Efectivo').toLowerCase()
+
+      totalAmount += monto
+
+      if (tipoPago.includes('tarjeta')) {
+        totalTarjeta += monto
+      } else if (tipoPago.includes('transferencia')) {
+        totalTransferencia += monto
+      } else {
+        totalEfectivo += monto
+      }
+    })
 
     const monthName = now.toLocaleString('es-ES', { month: 'long' })
     const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
@@ -100,6 +115,9 @@ export default function Dashboard() {
     return {
       salesCount: salesThisMonth.length,
       salesTotal: totalAmount,
+      efectivo: totalEfectivo,
+      transferencia: totalTransferencia,
+      tarjeta: totalTarjeta,
       currentMonthName: capitalizedMonth
     }
   }, [sales])
@@ -114,7 +132,7 @@ export default function Dashboard() {
           </p>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 space-y-6">
           <ControlPanel
             salesCount={dashboardStats.salesCount}
             salesTotal={dashboardStats.salesTotal}
@@ -122,20 +140,44 @@ export default function Dashboard() {
             onCobrar={() => setOpenCrearFactura(true)}
             onCredito={() => setOpenCrearCredito(true)}
           />
+
+          {/* --- NUEVA TARJETA DE TIPOS DE PAGO --- */}
+          <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
+            <p className="text-sm font-semibold text-black">Desglose por Tipo de Pago</p>
+            <div className="mt-4 flex flex-wrap gap-6">
+              <div>
+                <p className="text-[11px] uppercase text-neutral-500">Efectivo</p>
+                <p className="text-lg font-semibold text-emerald-600">
+                  ${dashboardStats.efectivo.toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase text-neutral-500">Transferencia</p>
+                <p className="text-lg font-semibold text-blue-600">
+                  ${dashboardStats.transferencia.toFixed(2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito</p>
+                <p className="text-lg font-semibold text-purple-600">
+                  ${dashboardStats.tarjeta.toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
+        <ProductosProxAgotar />
         <TopProducts />
         <InventoryPreview items={inventory} />
       </div>
 
-      {/* MODAL FACTURA: Usamos onCreate para lanzar la alerta */}
       <CreateInvoiceModal
         open={openCrearFactura}
         onClose={() => setOpenCrearFactura(false)}
         onCreate={handleCreateFactura}
       />
 
-      {/* MODAL CRÉDITO: El modal ya tiene la alerta interna, solo recargamos */}
       <CreateCreditoFiscalModal
         open={openCrearCredito}
         onClose={() => {

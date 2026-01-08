@@ -1,5 +1,5 @@
 // src/components/Paginas/Estadisticas.jsx
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   LineChart,
   Line,
@@ -52,14 +52,14 @@ const ProductSearch = ({ onSelectProduct }) => {
     setQ(product.nombre)
     setSelected(product)
     setResults([])
-    onSelectProduct(product) // Envía el producto al padre
+    onSelectProduct(product)
   }
 
   const handleClear = () => {
     setQ('')
     setSelected(null)
     setResults([])
-    onSelectProduct(null) // Envía 'null' al padre
+    onSelectProduct(null)
   }
 
   return (
@@ -99,18 +99,15 @@ const ProductSearch = ({ onSelectProduct }) => {
 
 // --- Componente Principal de la Página ---
 export default function Estadisticas() {
-  // --- Estados de los filtros ---
   const [observe, setObserve] = useState('general')
   const [measure, setMeasure] = useState('efectivo')
   const [timeframe, setTimeframe] = useState('monthly')
   const [product, setProduct] = useState(null)
 
-  // --- Estado de los datos ---
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // --- Efecto para cargar datos cuando cambian los filtros ---
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -143,47 +140,37 @@ export default function Estadisticas() {
     fetchData()
   }, [observe, measure, timeframe, product])
 
-  // 1. Etiqueta dinámica para el Eje Y
+  // Etiqueta dinámica para el Eje Y
   const dynamicLabel = useMemo(() => {
-    if (measure === 'efectivo') {
-      return 'Venta ($)'
-    }
-    if (observe === 'general' || observe === 'invoices' || observe === 'credits') {
+    if (measure === 'efectivo') return 'Venta ($)'
+    // Ajustamos la etiqueta si estamos filtrando por pago
+    if (['cash', 'transfer', 'card'].includes(observe)) return 'Transacciones (unid.)'
+    if (observe === 'general' || observe === 'invoices' || observe === 'credits')
       return 'Transacciones (unid.)'
-    }
     return 'Cantidad (unid.)'
   }, [measure, observe])
 
-  // 2. Formateador para el Eje Y
   const yAxisFormatter = (value) => {
-    if (measure === 'efectivo') {
-      return `$${value}`
-    }
-    return Math.floor(value) // Muestra números enteros
+    if (measure === 'efectivo') return `$${value}`
+    return Math.floor(value)
   }
 
-  // 3. NUEVA FUNCIÓN: Formateador para el Eje X
   const xAxisFormatter = (dateString) => {
-    // Convierte "2025-11-05" en "5/11/2025"
     try {
       const [year, month, day] = dateString.split('-')
       return `${Number(day)}/${Number(month)}/${year}`
     } catch (e) {
-      return dateString // Devuelve el original si falla
+      return dateString
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Ocultamos el encabezado y el botón al imprimir */}
       <div className="flex justify-between items-start print:hidden">
-        {/* Grupo Izquierdo: Título y Descripción */}
         <div>
           <h1 className="text-xl font-semibold text-black">Estadísticas</h1>
           <p className="text-sm text-neutral-500">Analiza tus ventas a lo largo del tiempo.</p>
         </div>
-
-        {/* Grupo Derecho: Botón */}
         <button
           onClick={() => window.print()}
           className="h-9 px-4 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600"
@@ -192,18 +179,17 @@ export default function Estadisticas() {
         </button>
       </div>
 
-      {/* --- Panel de Filtros --- */}
-
-      {/* --- INICIO DE LA CORRECCIÓN --- */}
-      {/* Quitamos 'print:hidden' de esta línea para que los filtros SÍ se impriman */}
       <div className="flex flex-wrap gap-4 p-4 bg-white rounded-xl ring-1 ring-neutral-200">
-        {/* --- FIN DE LA CORRECCIÓN --- */}
-
         <Select label="Observar" value={observe} onChange={(e) => setObserve(e.target.value)}>
           <option value="general">Ventas Generales</option>
           <option value="invoices">Solo Facturas</option>
           <option value="credits">Solo Créditos Fiscales</option>
           <option value="products">Por Producto</option>
+          <hr />
+          {/* NUEVAS OPCIONES DE FILTRO */}
+          <option value="cash">Ventas en efectivo</option>
+          <option value="transfer">Ventas en transferencia</option>
+          <option value="card">Ventas por tarjeta de crédito</option>
         </Select>
 
         <Select label="Medir" value={measure} onChange={(e) => setMeasure(e.target.value)}>
@@ -225,7 +211,6 @@ export default function Estadisticas() {
         {observe === 'products' && <ProductSearch onSelectProduct={setProduct} />}
       </div>
 
-      {/* --- El Gráfico --- */}
       <div className="p-4 bg-white rounded-xl ring-1 ring-neutral-200" style={{ height: '500px' }}>
         {loading && <div className="text-center p-10">Cargando gráfico...</div>}
         {error && <div className="text-center p-10 text-red-600">{error}</div>}
@@ -243,7 +228,7 @@ export default function Estadisticas() {
               <XAxis dataKey="fecha" tickFormatter={xAxisFormatter} />
               <YAxis tickFormatter={yAxisFormatter} />
               <Tooltip
-                labelFormatter={xAxisFormatter} // Formatea el título (fecha) del tooltip
+                labelFormatter={xAxisFormatter}
                 formatter={(value) => [yAxisFormatter(value), dynamicLabel]}
               />
               <Legend />

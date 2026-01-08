@@ -5,7 +5,7 @@ import VerFacturaModal from '../Modales/VerFacturaModal.jsx'
 import VerCreditoFiscalModal from '../Modales/VerCreditoFiscalModal.jsx'
 import FacturaIcon from '../../../../../resources/Factura.png'
 import CreditoIcon from '../../../../../resources/CreditoFiscal.png'
-import Swal from 'sweetalert2' // <--- 1. IMPORTAMOS SWAL
+import Swal from 'sweetalert2'
 import {
   listInvoices,
   listFiscalCredits,
@@ -15,11 +15,32 @@ import {
   deleteFiscalCredit
 } from '../../api'
 
+/* ---------- UI Helpers ---------- */
+
 const PillMoney = ({ value }) => (
   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 ring-1 ring-green-200">
     ${Number(value || 0).toFixed(2)}
   </span>
 )
+
+// --- NUEVO COMPONENTE PILLPAGO ---
+const PillPago = ({ value }) => {
+  const tipo = (value || 'Efectivo').toLowerCase()
+
+  let styles = 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+  let label = value || 'Efectivo'
+
+  if (tipo.includes('tarjeta')) {
+    styles = 'bg-purple-50 text-purple-700 ring-purple-200'
+    label = 'Tarjeta'
+  } else if (tipo.includes('transferencia')) {
+    styles = 'bg-blue-50 text-blue-700 ring-blue-200'
+  }
+
+  return (
+    <span className={`px-2 py-1 rounded-md text-xs font-medium ring-1 ${styles}`}>{label}</span>
+  )
+}
 
 function fmtFecha(d) {
   if (!d) return '—'
@@ -45,6 +66,9 @@ const Menu = ({ onView, onDelete }) => (
   </div>
 )
 
+/* =====================================================
+   Página: Ventas
+   ===================================================== */
 export default function Ventas() {
   const [query, setQuery] = useState('')
   const [openMenu, setOpenMenu] = useState(null)
@@ -66,7 +90,8 @@ export default function Ventas() {
         cliente: f.cliente,
         fecha: f.fecha_emision || f.fecha,
         tipo: 'Factura',
-        monto: f.total || f.monto
+        monto: f.total || f.monto,
+        tipo_de_pago: f.tipo_de_pago // <--- AGREGADO: Leemos el tipo de pago
       }))
 
       const mappedCreditos = creditos.map((c) => ({
@@ -75,7 +100,8 @@ export default function Ventas() {
         cliente: c.cliente,
         fecha: c.fecha_emision || c.fecha,
         tipo: 'Crédito Fiscal',
-        monto: c.total || c.monto
+        monto: c.total || c.monto,
+        tipo_de_pago: c.tipo_de_pago // <--- AGREGADO: Leemos el tipo de pago
       }))
 
       const allVentas = [...mappedFacturas, ...mappedCreditos]
@@ -99,12 +125,9 @@ export default function Ventas() {
     fetchVentas()
   }, [])
 
-  // 2. FUNCIÓN PARA MANEJAR EL ÉXITO DE FACTURA
   const handleCreateFactura = async () => {
-    await fetchVentas() // Recargamos la lista
-    setOpenFactura(false) // Cerramos el modal
-
-    // Mostramos la alerta
+    await fetchVentas()
+    setOpenFactura(false)
     Swal.fire({
       icon: 'success',
       title: 'Factura Creada',
@@ -120,19 +143,45 @@ export default function Ventas() {
     const currentYear = now.getUTCFullYear()
     const currentMonth = now.getUTCMonth()
 
+    // 1. Filtramos las ventas de este mes
     const thisMonthSales = ventas.filter((v) => {
       if (!v.fecha) return false
       const d = new Date(v.fecha)
       return d.getUTCFullYear() === currentYear && d.getUTCMonth() === currentMonth
     })
 
-    const total = thisMonthSales.reduce((acc, v) => acc + Number(v.monto || 0), 0)
+    // 2. Inicializamos contadores
+    let totalGeneral = 0
+    let totalEfectivo = 0
+    let totalTransferencia = 0
+    let totalTarjeta = 0
+
+    // 3. Recorremos y sumamos según el tipo de pago
+    thisMonthSales.forEach((v) => {
+      const monto = Number(v.monto || 0)
+      const tipoPago = (v.tipo_de_pago || 'Efectivo').toLowerCase()
+
+      totalGeneral += monto
+
+      if (tipoPago.includes('tarjeta')) {
+        totalTarjeta += monto
+      } else if (tipoPago.includes('transferencia')) {
+        totalTransferencia += monto
+      } else {
+        // Por defecto todo lo demás (o 'Efectivo') va a efectivo
+        totalEfectivo += monto
+      }
+    })
+
     const monthName = now.toLocaleString('es-ES', { month: 'long' })
     const capitalized = monthName.charAt(0).toUpperCase() + monthName.slice(1)
 
     return {
       count: thisMonthSales.length,
-      total: total,
+      total: totalGeneral,
+      efectivo: totalEfectivo,
+      transferencia: totalTransferencia,
+      tarjeta: totalTarjeta,
       name: capitalized
     }
   }, [ventas])
@@ -140,7 +189,10 @@ export default function Ventas() {
   const filtered = useMemo(
     () =>
       ventas.filter((v) =>
-        [v.id, v.cliente, v.tipo].join(' ').toLowerCase().includes(query.toLowerCase())
+        [v.id, v.cliente, v.tipo, v.tipo_de_pago]
+          .join(' ')
+          .toLowerCase()
+          .includes(query.toLowerCase())
       ),
     [ventas, query]
   )
@@ -222,7 +274,7 @@ export default function Ventas() {
                 <p className="text-lg font-semibold text-black">{monthStats.name}</p>
               </div>
               <div>
-                <p className="text-[11px] uppercase text-neutral-500">Ventas</p>
+                <p className="text-[11px] uppercase text-neutral-500">Ventas Totales</p>
                 <p className="text-lg font-semibold text-black">${monthStats.total.toFixed(2)}</p>
               </div>
             </div>
@@ -235,16 +287,41 @@ export default function Ventas() {
                 onClick={() => setOpenFactura(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold"
               >
-                <img src={FacturaIcon} className="w-5 h-5" />
+                <img src={FacturaIcon} className="w-5 h-5" alt="" />
                 Factura
               </button>
               <button
                 onClick={() => setOpenCredito(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold"
               >
-                <img src={CreditoIcon} className="w-5 h-5" />
+                <img src={CreditoIcon} className="w-5 h-5" alt="" />
                 Crédito fiscal
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* --- TARJETAS DE TIPOS DE PAGO --- */}
+        <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
+          <p className="text-sm font-semibold text-black">Desglose por Tipo de Pago</p>
+          <div className="mt-4 flex flex-wrap gap-6">
+            <div>
+              <p className="text-[11px] uppercase text-neutral-500">Efectivo</p>
+              <p className="text-lg font-semibold text-emerald-600">
+                ${monthStats.efectivo.toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase text-neutral-500">Transferencia</p>
+              <p className="text-lg font-semibold text-blue-600">
+                ${monthStats.transferencia.toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito</p>
+              <p className="text-lg font-semibold text-purple-600">
+                ${monthStats.tarjeta.toFixed(2)}
+              </p>
             </div>
           </div>
         </div>
@@ -277,6 +354,7 @@ export default function Ventas() {
                   <th className="px-4 py-3 text-left">Cliente</th>
                   <th className="px-4 py-3 text-left">Fecha</th>
                   <th className="px-4 py-3 text-left">Tipo</th>
+                  <th className="px-4 py-3 text-left">Pago</th> {/* <--- NUEVA COLUMNA */}
                   <th className="px-4 py-3 text-left">Venta dólares</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -284,7 +362,7 @@ export default function Ventas() {
               <tbody className="divide-y divide-neutral-200">
                 {loading && (
                   <tr>
-                    <td colSpan="6" className="px-4 py-6 text-center text-neutral-400">
+                    <td colSpan="7" className="px-4 py-6 text-center text-neutral-400">
                       Cargando ventas...
                     </td>
                   </tr>
@@ -296,6 +374,12 @@ export default function Ventas() {
                       <td className="px-4 py-3">{v.cliente}</td>
                       <td className="px-4 py-3">{fmtFecha(v.fecha)}</td>
                       <td className="px-4 py-3">{v.tipo}</td>
+
+                      {/* NUEVA CELDA CON EL COMPONENTE */}
+                      <td className="px-4 py-3">
+                        <PillPago value={v.tipo_de_pago} />
+                      </td>
+
                       <td className="px-4 py-3">
                         <PillMoney value={v.monto} />
                       </td>
@@ -325,7 +409,7 @@ export default function Ventas() {
                   ))}
                 {!loading && filtered.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="px-4 py-6 text-center text-neutral-400">
+                    <td colSpan="7" className="px-4 py-6 text-center text-neutral-400">
                       No se encontraron ventas
                     </td>
                   </tr>

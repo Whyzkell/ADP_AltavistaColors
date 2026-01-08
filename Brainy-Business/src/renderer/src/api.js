@@ -123,6 +123,11 @@ export async function createInvoice(payload) {
     dui: payload.dui?.trim(),
     nit: payload.nit?.trim(),
     condiciones: payload.condiciones?.trim() || null,
+
+    // --- NUEVO: Agregamos el tipo de pago aquí ---
+    tipo_de_pago: payload.tipo_de_pago,
+    // --------------------------------------------
+
     items,
     meta: { ventaCuentaDe: payload.ventaCuentaDe || null }
   }
@@ -172,43 +177,11 @@ export async function deleteFiscalCredit(id) {
   return data
 }
 
-export async function createFiscalCredit(payload) {
-  const items = (payload.productos || []).map((p) => ({
-    producto_id: p.pid ?? p.producto_id ?? null,
-    nombre: p.nombre,
-    cantidad: Number(p.cantidad ?? p.cant ?? 0),
-    precio: Number(p.precioUnitario ?? p.precio ?? 0)
-  }))
-
-  const body = {
-    cliente: payload.cliente,
-    direccion: payload.direccion,
-    municipio: payload.municipio,
-    departamento: payload.departamento,
-    nrc: payload.nrc,
-    nit: payload.nit,
-    condiciones: payload.condiciones,
-    items,
-    meta: {
-      ventaCuentaDe: payload.ventaCuentaDe,
-      notaAnterior: payload.notaAnterior,
-      fechaNotaAnterior: payload.fechaNotaAnterior,
-      entregadoPor: payload.entregadoPor,
-      recibidoPor: payload.recibidoPor,
-      duiEntregado: payload.duiEntregado,
-      duiRecibido: payload.duiRecibido,
-      resumen: payload.resumen,
-      creadoEn: payload.creadoEn
-    }
-  }
-
-  const { data } = await api.post('/api/creditos', body)
-  return data
-}
-
 export async function createCreditoFiscal(payload) {
+  // Helper para normalizar valores nulos
   const n = (v) => (v === undefined || v === null || String(v).trim() === '' ? null : v)
 
+  // Procesamiento de items
   const items = (payload.productos || [])
     .filter((p) => Number(p.cant) > 0 && Number(p.precio) >= 0)
     .map((p) => ({
@@ -219,6 +192,7 @@ export async function createCreditoFiscal(payload) {
       total: Number((Number(p.cant || 0) * Number(p.precio || 0)).toFixed(2))
     }))
 
+  // Construcción del cuerpo de la petición
   const body = {
     cliente: n(payload.cliente),
     direccion: n(payload.direccion),
@@ -230,6 +204,11 @@ export async function createCreditoFiscal(payload) {
     nota_remision_ant: n(payload.notaAnterior),
     fecha_remision_ant: n(payload.fechaNotaAnterior),
     venta_cuenta_de: n(payload.ventaCuentaDe),
+
+    // 👇 ¡AQUÍ ES DONDE FALTABA! 👇
+    tipo_de_pago: payload.tipo_de_pago,
+    // ☝️ SIN ESTO, EL BACKEND SIEMPRE RECIBE NULL Y PONE EL DEFAULT
+
     subtotal: Number(payload?.resumen?.sumas ?? payload?.resumen?.subTotal ?? 0),
     iva_13: Number(payload?.resumen?.iva13 ?? 0),
     iva_retenido: Number(payload?.resumen?.ivaRetenido ?? 0),
@@ -271,7 +250,17 @@ export async function getTopProducts() {
 
 export async function getGraphData(params) {
   try {
-    const query = new URLSearchParams(params).toString()
+    // 1. LIMPIEZA: Creamos un objeto solo con los valores válidos
+    const cleanParams = {}
+    Object.keys(params).forEach((key) => {
+      if (params[key] !== null && params[key] !== undefined && params[key] !== '') {
+        cleanParams[key] = params[key]
+      }
+    })
+
+    // 2. Ahora sí usamos URLSearchParams con los datos limpios
+    const query = new URLSearchParams(cleanParams).toString()
+
     const { data } = await api.get(`/api/stats/timeseries?${query}`)
     return data
   } catch (e) {
@@ -306,3 +295,15 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+export async function getLowStockProducts() {
+  try {
+    // Asegúrate de haber creado la ruta '/api/stats/low-stock' en tu backend
+    const { data } = await api.get('/api/stats/low-stock')
+    return data
+  } catch (e) {
+    console.error('API Error getLowStockProducts:', e.response?.data || e)
+    const msg = e.response?.data?.error || e.message || 'Error cargando productos con bajo stock'
+    throw new Error(msg)
+  }
+}

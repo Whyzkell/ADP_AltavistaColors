@@ -1,13 +1,14 @@
 // src/routes/stats.routes.js
-const router = require("express").Router();
-const auth = require("../middleware/authMiddleware");
-const ctrl = require("../controllers/stats.controller");
+const router = require('express').Router()
+const auth = require('../middleware/authMiddleware')
+const ctrl = require('../controllers/stats.controller')
 
 // Protegemos la ruta
-router.use(auth);
+router.use(auth)
 
 // Ruta para obtener los productos top
-router.get("/top-products", ctrl.getTopProducts);
-router.get("/timeseries", ctrl.getTimeSeries);
+router.get('/top-products', ctrl.getTopProducts)
+router.get('/timeseries', ctrl.getTimeSeries)
+router.get('/low-stock', ctrl.getLowStock)
 
-module.exports = router;
+module.exports = router

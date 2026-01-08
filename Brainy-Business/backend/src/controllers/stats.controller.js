@@ -1,21 +1,14 @@
 // src/controllers/stats.controller.js
-const db = require('../db/index') // Asegúrate de que esto apunte a tu configuración de DB correcta
+const db = require('../db/index')
 
 exports.getTopProducts = async (req, res) => {
   try {
-    /*
-     * Esta consulta hace lo siguiente:
-     * 1. Usa UNION ALL para juntar todos los items de facturas y créditos.
-     * 2. Se une con la tabla 'productos'.
-     * 3. Agrupa por producto_id, nombre, codigo E IMAGEN.
-     * 4. Suma totales y ordena.
-     */
     const query = `
         SELECT 
             p.id AS producto_id,
             p.nombre,
             p.codigo,
-            p.imagen,  -- <--- AGREGADO: Necesario para mostrar la foto
+            p.imagen,
             SUM(t.cantidad) AS total_unidades_vendidas,
             SUM(t.cantidad * t.precio_unit) AS total_valor_vendido
         FROM (
@@ -25,11 +18,10 @@ exports.getTopProducts = async (req, res) => {
         ) AS t
         JOIN productos p ON t.producto_id = p.id
         WHERE t.producto_id IS NOT NULL
-        GROUP BY p.id, p.nombre, p.codigo, p.imagen -- <--- AGREGADO: Obligatorio en GROUP BY
+        GROUP BY p.id, p.nombre, p.codigo, p.imagen
         ORDER BY total_unidades_vendidas DESC
         LIMIT 10;
     `
-
     const { rows } = await db.query(query)
     res.json(rows)
   } catch (e) {
@@ -38,11 +30,11 @@ exports.getTopProducts = async (req, res) => {
   }
 }
 
-// NUEVA FUNCIÓN PARA EL GRÁFICO (ACTUALIZADA)
+// NUEVA FUNCIÓN PARA EL GRÁFICO (ACTUALIZADA CON FILTROS DE PAGO)
 exports.getTimeSeries = async (req, res) => {
   try {
     const {
-      observe = 'general', // 'general', 'invoices', 'credits', 'product'
+      observe = 'general', // 'general', 'invoices', 'credits', 'product', 'cash', 'transfer', 'card'
       measure = 'cantidad', // 'cantidad', 'efectivo'
       timeframe = 'monthly', // 'weekly', 'monthly', 'yearly', 'all'
       productId = null
@@ -51,39 +43,55 @@ exports.getTimeSeries = async (req, res) => {
     const params = []
     let paramIndex = 1
 
-    // --- 1. Definir Origen de Datos (Filtro) ---
-    // AHORA INCLUYE 'doc_id' (el id de la factura/credito)
+    /* --- 1. DEFINIR ORIGEN DE DATOS ---
+       Modificamos la subconsulta para incluir 'tipo_de_pago' desde las tablas principales.
+       Esto es necesario para poder filtrar luego.
+    */
     let sourceQuery = `
       (
-        SELECT 'invoice' as tipo, f.id as doc_id, fecha_emision, producto_id, cantidad, precio_unit
-        FROM facturas f JOIN factura_items fi ON f.id = fi.factura_id
+        SELECT 
+          'invoice' as tipo, 
+          f.id as doc_id, 
+          f.fecha_emision, 
+          f.tipo_de_pago, -- <--- NUEVO CAMPO NECESARIO
+          fi.producto_id, 
+          fi.cantidad, 
+          fi.precio_unit
+        FROM facturas f 
+        JOIN factura_items fi ON f.id = fi.factura_id
       ) UNION ALL (
-        SELECT 'credit' as tipo, cf.id as doc_id, fecha_emision, producto_id, cantidad, precio_unit
-        FROM creditos_fiscales cf JOIN credito_items ci ON cf.id = ci.credito_id
+        SELECT 
+          'credit' as tipo, 
+          cf.id as doc_id, 
+          cf.fecha_emision, 
+          cf.tipo_de_pago, -- <--- NUEVO CAMPO NECESARIO
+          ci.producto_id, 
+          ci.cantidad, 
+          ci.precio_unit
+        FROM creditos_fiscales cf 
+        JOIN credito_items ci ON cf.id = ci.credito_id
       )
     `
 
-    // --- 2. Definir Medida (Eje Y) ---
-    // ¡ESTA ES LA LÓGICA CORREGIDA!
+    /* --- 2. DEFINIR MEDIDA (Eje Y) --- */
     let measureSelect
     if (measure === 'efectivo') {
-      // Para "Efectivo", siempre sumamos el valor
+      // Suma monetaria
       measureSelect = 'SUM(t.cantidad * t.precio_unit)'
     } else {
-      // measure === 'cantidad'
-      // Si es "Cantidad", depende de qué observamos
-      if (observe === 'general' || observe === 'invoices' || observe === 'credits') {
-        // Contar # de documentos únicos (transacciones)
+      // Cantidad (unidades o transacciones)
+      // Si observamos transacciones (general, facturas, créditos o POR PAGO)
+      if (['general', 'invoices', 'credits', 'cash', 'transfer', 'card'].includes(observe)) {
         measureSelect = 'COUNT(DISTINCT t.doc_id)'
       } else {
-        // Contar # de productos (para 'product')
+        // Por producto (suma de unidades físicas)
         measureSelect = 'SUM(t.cantidad)'
       }
     }
 
-    // --- 3. Definir Lapso de Tiempo (Eje X) ---
+    /* --- 3. DEFINIR LAPSO DE TIEMPO (Eje X) --- */
     let dateWhere = ''
-    let grouping = `DATE_TRUNC('day', t.fecha_emision)` // Por defecto, agrupar por día
+    let grouping = `DATE_TRUNC('day', t.fecha_emision)`
 
     if (timeframe === 'weekly') {
       dateWhere = `WHERE t.fecha_emision >= NOW() - INTERVAL '7 days'`
@@ -91,24 +99,37 @@ exports.getTimeSeries = async (req, res) => {
       dateWhere = `WHERE t.fecha_emision >= NOW() - INTERVAL '30 days'`
     } else if (timeframe === 'yearly') {
       dateWhere = `WHERE t.fecha_emision >= NOW() - INTERVAL '12 months'`
-      grouping = `DATE_TRUNC('month', t.fecha_emision)` // Agrupar por mes para 'anual'
+      grouping = `DATE_TRUNC('month', t.fecha_emision)`
     } else {
-      // 'all' - no hay filtro de fecha
-      grouping = `DATE_TRUNC('month', t.fecha_emision)` // Agrupar por mes para 'all'
+      grouping = `DATE_TRUNC('month', t.fecha_emision)`
     }
 
-    // --- 4. Añadir Filtros de Observación ---
+    /* --- 4. AÑADIR FILTROS DE OBSERVACIÓN --- */
+    // Helper para añadir condiciones al WHERE
+    const addCondition = (cond) => {
+      dateWhere += (dateWhere ? ' AND' : 'WHERE') + ` ${cond}`
+    }
+
     if (observe === 'invoices') {
-      dateWhere += (dateWhere ? ' AND' : 'WHERE') + ` t.tipo = 'invoice'`
+      addCondition(`t.tipo = 'invoice'`)
     } else if (observe === 'credits') {
-      dateWhere += (dateWhere ? ' AND' : 'WHERE') + ` t.tipo = 'credit'`
+      addCondition(`t.tipo = 'credit'`)
     } else if (observe === 'product' && productId) {
-      dateWhere += (dateWhere ? ' AND' : 'WHERE') + ` t.producto_id = $${paramIndex}`
+      addCondition(`t.producto_id = $${paramIndex}`)
       params.push(productId)
       paramIndex++
     }
+    // --- NUEVOS FILTROS DE PAGO ---
+    else if (observe === 'cash') {
+      addCondition(`t.tipo_de_pago = 'Efectivo'`)
+    } else if (observe === 'transfer') {
+      addCondition(`t.tipo_de_pago = 'Transferencia'`)
+    } else if (observe === 'card') {
+      // Nota: Asegúrate que en DB sea exacto 'Tarjeta de credito'
+      addCondition(`t.tipo_de_pago = 'Tarjeta de credito'`)
+    }
 
-    // --- 5. Construir Consulta Final ---
+    /* --- 5. CONSTRUIR CONSULTA FINAL --- */
     const query = `
       SELECT 
         ${grouping} AS fecha, 
@@ -123,7 +144,6 @@ exports.getTimeSeries = async (req, res) => {
 
     const { rows } = await db.query(query, params)
 
-    // Formatear para el gráfico (ej. '2025-10-20')
     const formattedRows = rows.map((r) => ({
       fecha: new Date(r.fecha).toISOString().split('T')[0],
       valor: Number(r.valor)
@@ -133,5 +153,27 @@ exports.getTimeSeries = async (req, res) => {
   } catch (e) {
     console.error('Error en getTimeSeries:', e)
     res.status(500).json({ error: e.message || 'Error interno del servidor' })
+  }
+}
+
+exports.getLowStock = async (req, res) => {
+  try {
+    const query = `
+      SELECT 
+        id, 
+        nombre, 
+        codigo, 
+        existencias, 
+        imagen 
+      FROM productos 
+      WHERE existencias <= 3 
+      ORDER BY existencias ASC -- Muestra primero los que tienen 0
+    `
+
+    const { rows } = await db.query(query)
+    res.json(rows)
+  } catch (e) {
+    console.error('Error en getLowStock:', e)
+    res.status(500).json({ error: e.message || 'Error interno' })
   }
 }
