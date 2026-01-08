@@ -345,6 +345,11 @@ export async function deleteLote(id) {
   return data
 }
 
+export async function getLotesByProduct(productId) {
+  const { data } = await api.get(`/api/lotes/producto/${productId}`)
+  return data
+}
+
 // NUEVA: Para la tabla principal
 export async function listLotes() {
   const { data } = await api.get('/api/lotes')

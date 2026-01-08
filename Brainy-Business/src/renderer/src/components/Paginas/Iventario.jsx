@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { fetchProducts, createProduct, updateProduct, deleteProduct } from '../../api'
+import {
+  fetchProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getLotesByProduct, // <--- NUEVO IMPORT
+  updateLote // <--- NUEVO IMPORT
+} from '../../api'
 import TopProducts from './TopProducts.jsx'
-import Swal from 'sweetalert2' // <--- IMPORTAMOS SWAL
+import Swal from 'sweetalert2'
 
 // URL del backend para cargar las imágenes
 const API_BASE = 'http://localhost:3001'
@@ -38,18 +45,7 @@ const ProductImage = ({ src, alt }) => {
   if (!src || error) {
     return (
       <div className="h-10 w-10 rounded-lg bg-neutral-100 ring-1 ring-neutral-200 flex items-center justify-center text-neutral-400">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <circle cx="8.5" cy="8.5" r="1.5"></circle>
-          <polyline points="21 15 16 10 5 21"></polyline>
-        </svg>
+        <span className="text-xs">📷</span>
       </div>
     )
   }
@@ -88,7 +84,7 @@ function Modal({ open, title, children, onClose }) {
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="absolute inset-0 flex items-start justify-center pt-10 px-4 sm:px-6">
-        <div className="w-full max-w-xl bg-white rounded-2xl shadow-xl ring-1 ring-neutral-200 max-h-[85vh] overflow-y-auto">
+        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl ring-1 ring-neutral-200 max-h-[90vh] overflow-y-auto">
           <div className="p-6 sm:p-8">
             <h3 className="text-2xl font-bold text-black">{title}</h3>
             <div className="mt-2 h-1 w-20 bg-neutral-900 rounded" />
@@ -114,16 +110,89 @@ function InputGreen({ className = '', ...props }) {
     <input
       {...props}
       className={
-        'w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none ' +
+        'w-full h-11 px-3 rounded-xl ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none disabled:bg-neutral-100 disabled:text-neutral-500 ' +
         className
       }
     />
   )
 }
 
+// --- SUB-COMPONENTE: Editor de Lote Individual ---
+const BatchEditor = ({ lote, onUpdate }) => {
+  const [data, setData] = useState({
+    codigo_lote: lote.codigo_lote || '',
+    fecha_vencimiento: lote.fecha_vencimiento ? lote.fecha_vencimiento.split('T')[0] : '',
+    cantidad_actual: lote.cantidad_actual
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleChange = (e) => setData({ ...data, [e.target.name]: e.target.value })
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      await updateLote(lote.id, data)
+      Swal.fire({
+        icon: 'success',
+        title: 'Lote actualizado',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 1500
+      })
+      onUpdate() // Recargar datos padre
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Error', text: e.message })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-12 gap-2 items-center bg-neutral-50 p-2 rounded-lg border border-neutral-200 text-sm">
+      <div className="col-span-3">
+        <input
+          name="codigo_lote"
+          value={data.codigo_lote}
+          onChange={handleChange}
+          placeholder="Cód."
+          className="w-full bg-white border border-neutral-300 rounded px-2 py-1"
+        />
+      </div>
+      <div className="col-span-4">
+        <input
+          type="date"
+          name="fecha_vencimiento"
+          value={data.fecha_vencimiento}
+          onChange={handleChange}
+          className="w-full bg-white border border-neutral-300 rounded px-2 py-1"
+        />
+      </div>
+      <div className="col-span-3">
+        <input
+          type="number"
+          name="cantidad_actual"
+          value={data.cantidad_actual}
+          onChange={handleChange}
+          className="w-full bg-white border border-neutral-300 rounded px-2 py-1 font-bold text-center"
+        />
+      </div>
+      <div className="col-span-2 text-right">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="bg-emerald-500 hover:bg-emerald-600 text-white px-2 py-1 rounded text-xs"
+        >
+          {saving ? '...' : 'Guardar'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function Iventario() {
   const [query, setQuery] = useState('')
-  // Menú inline: guardamos el ID del producto abierto
   const [openMenuId, setOpenMenuId] = useState(null)
 
   const [openAdd, setOpenAdd] = useState(false)
@@ -131,24 +200,27 @@ export default function Iventario() {
   const [loading, setLoading] = useState(false)
   const [productos, setProductos] = useState([])
 
+  // Función para cargar productos
+  const loadProducts = async () => {
+    try {
+      setLoading(true)
+      const rows = await fetchProducts()
+      setProductos(rows.map(mapRow))
+    } catch (e) {
+      console.error(e)
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: e.message || 'No se pudieron cargar los productos',
+        confirmButtonColor: '#11A5A3'
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    ;(async () => {
-      try {
-        setLoading(true)
-        const rows = await fetchProducts()
-        setProductos(rows.map(mapRow))
-      } catch (e) {
-        console.error(e)
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: e.message || 'No se pudieron cargar los productos',
-          confirmButtonColor: '#11A5A3'
-        })
-      } finally {
-        setLoading(false)
-      }
-    })()
+    loadProducts()
   }, [])
 
   const filtered = useMemo(
@@ -222,9 +294,12 @@ export default function Iventario() {
     imagenUrl: null
   })
   const [editFile, setEditFile] = useState(null)
+  const [editBatches, setEditBatches] = useState([]) // Estado para los lotes del producto
 
-  const onEditRow = (row) => {
-    setOpenMenuId(null) // Cerrar menú
+  const onEditRow = async (row) => {
+    setOpenMenuId(null)
+
+    // 1. Cargamos datos básicos
     setEditForm({
       id: row.id,
       idStr: row.idStr,
@@ -236,17 +311,39 @@ export default function Iventario() {
       imagenUrl: row.imagenUrl
     })
     setEditFile(null)
+    setEditBatches([]) // Limpiar lotes previos
+
+    // 2. Abrimos modal
     setOpenEdit(true)
+
+    // 3. Consultamos si tiene lotes
+    try {
+      const batches = await getLotesByProduct(row.id)
+      setEditBatches(batches)
+    } catch (e) {
+      console.error('Error cargando lotes', e)
+    }
+  }
+
+  // Callback para cuando se actualiza un lote (recargar todo para sincronizar stock)
+  const handleBatchUpdate = async () => {
+    // 1. Recargar lotes del modal
+    const batches = await getLotesByProduct(editForm.id)
+    setEditBatches(batches)
+
+    // 2. Recargar lista principal de productos (para actualizar stock total en la tabla de fondo)
+    loadProducts()
+
+    // 3. Recalcular stock total para el input visual (aunque esté disabled)
+    const newTotal = batches.reduce((acc, b) => acc + Number(b.cantidad_actual), 0)
+    setEditForm((prev) => ({ ...prev, existencias: newTotal }))
   }
 
   const onChangeEdit = (e) => setEditForm((s) => ({ ...s, [e.target.id]: e.target.value }))
 
   const guardarEdicion = async (e) => {
     e.preventDefault()
-    if (!editForm.id) {
-      Swal.fire({ icon: 'error', text: 'Error: No se encontró el ID del producto' })
-      return
-    }
+    if (!editForm.id) return
 
     try {
       const formData = new FormData()
@@ -254,7 +351,12 @@ export default function Iventario() {
       formData.append('categoria', editForm.categoria.trim())
       formData.append('precio', editForm.precio)
       formData.append('codigo', editForm.codigo)
+
+      // Si NO tiene lotes, mandamos la existencia del input.
+      // Si TIENE lotes, mandamos la misma que ya tiene (el backend ignora si no cambió,
+      // o usamos la calculada). Por seguridad, mandamos la del estado.
       formData.append('existencias', editForm.existencias)
+
       if (editFile) formData.append('imagen', editFile)
 
       const saved = await updateProduct(editForm.id, formData)
@@ -280,16 +382,20 @@ export default function Iventario() {
   }
 
   const eliminarProducto = async (row) => {
-    setOpenMenuId(null) // Cerrar menú
+    setOpenMenuId(null)
+    let warningText = 'Esta acción no se puede deshacer.'
+    if (row.existencias > 0) {
+      warningText = `⚠️ ¡CUIDADO! Este producto tiene ${row.existencias} unidades en stock (y posibles lotes). Si lo borras, se perderá todo ese registro.`
+    }
 
     const result = await Swal.fire({
       title: `¿Eliminar "${row.nombre}"?`,
-      text: 'Esta acción no se puede deshacer.',
+      text: warningText,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#E11D48',
       cancelButtonColor: '#11A5A3',
-      confirmButtonText: 'Sí, eliminar',
+      confirmButtonText: 'Sí, eliminar todo',
       cancelButtonText: 'Cancelar'
     })
 
@@ -298,37 +404,22 @@ export default function Iventario() {
     try {
       await deleteProduct(row.id)
       setProductos((arr) => arr.filter((x) => x.id !== row.id))
-
-      Swal.fire({
-        icon: 'success',
-        title: 'Eliminado',
-        text: 'El producto ha sido eliminado del inventario.',
-        timer: 1500,
-        showConfirmButton: false
-      })
+      Swal.fire({ icon: 'success', title: 'Eliminado', timer: 1500, showConfirmButton: false })
     } catch (err) {
       console.error(err)
       const errorMsg = err.message || ''
-
-      // Detectamos si es error de llave foránea (usado en facturas)
-      if (
-        errorMsg.includes('foreign key') ||
-        errorMsg.includes('llave foránea') ||
-        errorMsg.includes('factura_items')
-      ) {
+      if (errorMsg.includes('foreign key') || errorMsg.includes('factura_items')) {
         Swal.fire({
           icon: 'error',
           title: 'No se puede eliminar',
-          text: 'Este producto no se puede eliminar porque ya ha sido vendido en una Factura o Crédito Fiscal.',
-          footer: 'Intenta desactivarlo o eliminar la venta primero.',
+          text: 'Este producto ya ha sido vendido. No puedes borrar el historial.',
           confirmButtonColor: '#11A5A3'
         })
       } else {
-        // Error genérico
         Swal.fire({
           icon: 'error',
           title: 'Error al eliminar',
-          text: 'Ocurrió un problema al intentar eliminar el producto.',
+          text: 'Ocurrió un problema.',
           confirmButtonColor: '#11A5A3'
         })
       }
@@ -362,7 +453,6 @@ export default function Iventario() {
           </button>
         </div>
 
-        {/* --- CAMBIO AQUÍ: Solo mostramos TopProducts si NO hay búsqueda --- */}
         {!query.trim() && <TopProducts />}
 
         <div className="mt-6 bg-white rounded-xl ring-1 ring-neutral-200 overflow-visible">
@@ -399,7 +489,6 @@ export default function Iventario() {
                       >
                         ⋮
                       </button>
-
                       {openMenuId === p.id && (
                         <Menu onEdit={() => onEditRow(p)} onDelete={() => eliminarProducto(p)} />
                       )}
@@ -429,14 +518,11 @@ export default function Iventario() {
         title="Agregar producto"
       >
         <form onSubmit={agregarProducto} className="space-y-5">
+          {/* ... (Formulario de agregar se mantiene igual, asumiendo productos nuevos sin lotes al inicio) ... */}
           <div className="p-4 rounded-xl bg-neutral-50 ring-1 ring-neutral-200 flex flex-col items-center gap-3">
             <div className="h-20 w-20 rounded-lg bg-white ring-1 ring-neutral-200 flex items-center justify-center overflow-hidden">
               {nuevoFile ? (
-                <img
-                  src={URL.createObjectURL(nuevoFile)}
-                  alt="Preview"
-                  className="h-full w-full object-cover"
-                />
+                <img src={URL.createObjectURL(nuevoFile)} className="h-full w-full object-cover" />
               ) : (
                 <span className="text-2xl text-neutral-300">📷</span>
               )}
@@ -452,11 +538,7 @@ export default function Iventario() {
                 onChange={(e) => setNuevoFile(e.target.files[0])}
               />
             </label>
-            <span className="text-xs text-neutral-400">
-              {nuevoFile ? nuevoFile.name : 'Sin archivo seleccionado'}
-            </span>
           </div>
-
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Nombre">
               <InputGreen id="nombre" value={nuevo.nombre} onChange={onChangeNew} required />
@@ -487,8 +569,7 @@ export default function Iventario() {
               />
             </Field>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <div className="grid grid-cols-2 gap-3 pt-2">
             <button
               type="submit"
               className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-[#11A5A3]"
@@ -515,17 +596,9 @@ export default function Iventario() {
           <div className="p-4 rounded-xl bg-neutral-50 ring-1 ring-neutral-200 flex flex-col items-center gap-3">
             <div className="h-20 w-20 rounded-lg bg-white ring-1 ring-neutral-200 flex items-center justify-center overflow-hidden">
               {editFile ? (
-                <img
-                  src={URL.createObjectURL(editFile)}
-                  alt="New Preview"
-                  className="h-full w-full object-cover"
-                />
+                <img src={URL.createObjectURL(editFile)} className="h-full w-full object-cover" />
               ) : editForm.imagenUrl ? (
-                <img
-                  src={editForm.imagenUrl}
-                  alt="Current"
-                  className="h-full w-full object-cover"
-                />
+                <img src={editForm.imagenUrl} className="h-full w-full object-cover" />
               ) : (
                 <span className="text-2xl text-neutral-300">📷</span>
               )}
@@ -541,9 +614,6 @@ export default function Iventario() {
                 onChange={(e) => setEditFile(e.target.files[0])}
               />
             </label>
-            <span className="text-xs text-neutral-400">
-              {editFile ? editFile.name : 'Mantener imagen actual'}
-            </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -572,17 +642,44 @@ export default function Iventario() {
                 required
               />
             </Field>
-            <Field label="Existencias">
-              <InputGreen
-                id="existencias"
-                type="number"
-                min="0"
-                step="1"
-                value={editForm.existencias}
-                onChange={onChangeEdit}
-                required
-              />
-            </Field>
+
+            {/* LÓGICA CONDICIONAL DE STOCK */}
+            <div className="col-span-1 sm:col-span-2">
+              <Field label="Existencias">
+                {editBatches.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                      ⚠️ Este producto tiene lotes. Edita las cantidades aquí:
+                    </div>
+                    {/* Lista de lotes editables */}
+                    <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                      <div className="grid grid-cols-12 text-xs font-semibold text-neutral-500 px-2">
+                        <div className="col-span-3">Cód</div>
+                        <div className="col-span-4">Vencimiento</div>
+                        <div className="col-span-3 text-center">Cant.</div>
+                        <div className="col-span-2"></div>
+                      </div>
+                      {editBatches.map((lote) => (
+                        <BatchEditor key={lote.id} lote={lote} onUpdate={handleBatchUpdate} />
+                      ))}
+                    </div>
+                    <div className="text-right text-sm font-bold text-neutral-700 mt-2">
+                      Total Calculado: {editForm.existencias}
+                    </div>
+                  </div>
+                ) : (
+                  <InputGreen
+                    id="existencias"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={editForm.existencias}
+                    onChange={onChangeEdit}
+                    required
+                  />
+                )}
+              </Field>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
