@@ -101,15 +101,15 @@ exports.list = async (req, res) => {
     }
 
     // --- AGREGA ESTO ---
-    console.log('--- [DEBUG 1] BACKEND BUSQUEDA ---')
-    if (resultados.length > 0) {
-      // Imprimimos el primer resultado para ver si lleva la etiqueta
-      console.log('Ejemplo de item encontrado:', {
-        nombre: resultados[0].nombre,
-        es_servicio: resultados[0].es_servicio,
-        tipo: typeof resultados[0].es_servicio
-      })
-    }
+    //console.log('--- [DEBUG 1] BACKEND BUSQUEDA ---')
+    //if (resultados.length > 0) {
+    // Imprimimos el primer resultado para ver si lleva la etiqueta
+    // console.log('Ejemplo de item encontrado:', {
+    //    nombre: resultados[0].nombre,
+    //    es_servicio: resultados[0].es_servicio,
+    //   tipo: typeof resultados[0].es_servicio
+    //  })
+    // }
     // -------------------
 
     res.json(resultados)

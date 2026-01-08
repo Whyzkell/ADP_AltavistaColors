@@ -357,3 +357,13 @@ export async function listLotes() {
   const { data } = await api.get('/api/lotes')
   return data
 }
+
+export async function getExpiringBatches() {
+  try {
+    const { data } = await api.get('/api/stats/expiring-batches')
+    return data
+  } catch (e) {
+    console.error('API Error getExpiringBatches:', e)
+    return []
+  }
+}

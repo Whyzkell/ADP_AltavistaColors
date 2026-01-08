@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { fetchProducts, listLotes, createLote, updateLote, deleteLote } from '../../api'
 import Swal from 'sweetalert2'
+import LotesProximosAVencer from '../dashboard/LotesProximosAVencer'
 
 // URL del backend para imágenes
 const API_BASE = 'http://localhost:3001'
@@ -273,6 +274,7 @@ export default function Vencimientos() {
           </button>
         </div>
 
+        <LotesProximosAVencer />
         {/* Tabla */}
         <div className="mt-6 bg-white rounded-xl ring-1 ring-neutral-200 overflow-visible">
           <table className="w-full text-sm">

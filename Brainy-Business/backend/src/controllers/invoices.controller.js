@@ -36,7 +36,7 @@ exports.getOne = async (req, res) => {
 
 exports.create = async (req, res) => {
   // --- AGREGA ESTO AL PURO INICIO ---
-  console.log('--- [DEBUG 4] BACKEND RECIBE ---')
+  /* console.log('--- [DEBUG 4] BACKEND RECIBE ---')
   const incomingItems = req.body.items || req.body.productos || []
   if (incomingItems.length > 0) {
     console.log('Primer item recibido:', {
@@ -46,7 +46,7 @@ exports.create = async (req, res) => {
     })
   } else {
     console.log('No llegaron items o array vacío')
-  }
+  }*/
   // ----------------------------------
 
   const {

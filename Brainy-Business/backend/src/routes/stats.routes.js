@@ -10,5 +10,5 @@ router.use(auth)
 router.get('/top-products', ctrl.getTopProducts)
 router.get('/timeseries', ctrl.getTimeSeries)
 router.get('/low-stock', ctrl.getLowStock)
-
+router.get('/expiring-batches', ctrl.getExpiringBatches)
 module.exports = router

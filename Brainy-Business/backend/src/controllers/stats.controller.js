@@ -177,3 +177,26 @@ exports.getLowStock = async (req, res) => {
     res.status(500).json({ error: e.message || 'Error interno' })
   }
 }
+
+exports.getExpiringBatches = async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT 
+        l.id,
+        l.codigo_lote,
+        l.fecha_vencimiento,
+        l.cantidad_actual,
+        p.nombre as producto_nombre,
+        p.imagen
+      FROM lotes l
+      JOIN productos p ON l.producto_id = p.id
+      WHERE l.cantidad_actual > 0
+      ORDER BY l.fecha_vencimiento ASC
+      LIMIT 5
+    `)
+    res.json(rows)
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Error al obtener vencimientos' })
+  }
+}
