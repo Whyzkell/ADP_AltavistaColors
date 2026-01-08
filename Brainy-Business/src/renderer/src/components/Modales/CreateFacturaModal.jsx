@@ -1,12 +1,22 @@
+// src/renderer/src/components/Modales/CreateFacturaModal.jsx
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import ModalFactura from './ModalFactura.jsx'
-import { fetchProducts, createInvoice } from '../../api'
+import { createInvoice } from '../../api'
 import Swal from 'sweetalert2'
 
 // <--- URL para cargar las fotos
 const API_BASE = 'http://localhost:3001'
 
-const emptyProd = { pid: null, cant: 0, nombre: '', precio: 0, maxStock: null }
+// Agregamos lote_id y es_servicio al objeto vacío
+const emptyProd = {
+  pid: null,
+  cant: 0,
+  nombre: '',
+  precio: 0,
+  maxStock: null,
+  lote_id: null,
+  es_servicio: false
+}
 const PAGE_SIZE = 6
 
 export default function CreateInvoiceModal({ open, onClose, onCreate }) {
@@ -18,7 +28,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     dui: '',
     condiciones: '',
     nit: '',
-    tipo_de_pago: 'Efectivo' // <--- NUEVO CAMPO POR DEFECTO
+    tipo_de_pago: 'Efectivo'
   })
   const up = (k, v) => setF((s) => ({ ...s, [k]: v }))
 
@@ -33,6 +43,9 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         if (k === 'cant') {
           let val = Number.isNaN(Number(v)) ? 0 : Number(v)
 
+          // VALIDACIÓN DE STOCK:
+          // Solo validamos si maxStock TIENE un valor numérico.
+          // Si es un servicio (es_servicio=true), maxStock es null, así que no entra aquí.
           if (p.maxStock !== null && p.maxStock !== undefined) {
             if (val > p.maxStock) {
               Swal.fire({
@@ -89,29 +102,62 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     const t = setTimeout(async () => {
       try {
         setBusy(true)
-        const rows = await fetchProducts(text)
 
-        const needle = text.toLowerCase()
-        const local = rows.filter((r) => {
-          const nombre = (r.nombre ?? '').toLowerCase()
-          const cat = (r.categoria ?? '').toLowerCase()
-          const codigo = String(r.codigo ?? '')
-          return nombre.includes(needle) || cat.includes(needle) || codigo.includes(text)
+        // 1. Obtenemos el token para autenticarnos
+        const token = localStorage.getItem('token')
+
+        // 2. Hacemos el fetch DIRECTO enviando scope=billing
+        const response = await fetch(`${API_BASE}/api/products?q=${text}&scope=billing`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
         })
 
-        const mapped = local.map((r) => ({
-          pid: r.id ?? r.id_producto,
+        if (!response.ok) {
+          if (response.status === 401) throw new Error('Sesión expirada')
+          throw new Error('Error buscando productos')
+        }
+
+        const rows = await response.json()
+
+        console.log('--- [DEBUG 2] FRONTEND RECIBE SEARCH ---')
+        if (rows.length > 0) {
+          console.log('Item crudo desde API:', rows[0])
+        }
+
+        // 3. Mapeamos la respuesta
+        const mapped = rows.map((r) => ({
+          pid: r.id_producto || r.id, // Aseguramos tomar el ID correcto
           nombre: r.nombre,
           precio: Number(r.precio ?? r.precio_unit ?? 0),
           codigo: r.codigo,
           categoria: r.categoria,
-          existencias: Number(r.existencias ?? r.stock ?? r.cantidad ?? 999999),
+
+          // --- AQUÍ RECIBIMOS LA ETIQUETA VIRTUAL DEL BACKEND ---
+          es_servicio: r.es_servicio === true || String(r.es_servicio) === 'true',
+
+          lotes: r.lotes || [],
+          // Si es servicio, stock infinito visual (999999). Si es producto, su stock real.
+          existencias:
+            r.es_servicio === true || String(r.es_servicio) === 'true'
+              ? 999999
+              : Number(r.existencias ?? r.stock ?? 0),
           imagen: r.imagen
         }))
 
-        if (alive) setResults(mapped.slice(0, 50))
+        // Filtro local adicional por seguridad visual
+        const needle = text.toLowerCase()
+        const local = mapped.filter((r) => {
+          const n = (r.nombre || '').toLowerCase()
+          const c = (r.categoria || '').toLowerCase()
+          const cod = String(r.codigo || '')
+          return n.includes(needle) || c.includes(needle) || cod.includes(text)
+        })
+
+        if (alive) setResults(local.slice(0, 50))
       } catch (e) {
-        console.error('fetchProducts(q) error:', e)
+        console.error('Buscador error:', e)
         if (alive) setResults([])
       } finally {
         if (alive) setBusy(false)
@@ -124,19 +170,27 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     }
   }, [q])
 
-  const addFromSearch = (item) => {
+  /* ------------------------------------------------------------------
+     LÓGICA PRINCIPAL DE AGREGAR PRODUCTO (Servicios + Lotes)
+     ------------------------------------------------------------------ */
+  const agregarProductoAlEstado = (item, maxStockDisp, loteId = null, nombreDisplay = '') => {
     setProds((arr) => {
-      const idx = arr.findIndex((p) => p.pid && p.pid === item.pid)
+      // Buscamos coincidencia exacta: mismo ID, mismo lote y mismo tipo (servicio/producto)
+      const idx = arr.findIndex(
+        (p) => p.pid === item.pid && p.lote_id == loteId && p.es_servicio === item.es_servicio
+      )
 
       if (idx !== -1) {
+        // YA EXISTE: Sumamos 1
         const copy = [...arr]
         const currentCant = Number(copy[idx].cant || 0)
 
-        if (item.existencias !== undefined && currentCant + 1 > item.existencias) {
+        // Solo validamos stock si NO es servicio
+        if (!item.es_servicio && currentCant + 1 > maxStockDisp) {
           Swal.fire({
             icon: 'warning',
             title: 'Límite de Stock',
-            text: `No puedes agregar más. Solo hay ${item.existencias} en inventario.`,
+            text: `No puedes agregar más. Solo hay ${maxStockDisp} disponibles.`,
             confirmButtonColor: '#11A5A3'
           })
           return copy
@@ -145,35 +199,94 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         copy[idx] = {
           ...copy[idx],
           cant: currentCant + 1,
-          maxStock: item.existencias
+          maxStock: item.es_servicio ? null : maxStockDisp
         }
         return copy
       }
 
-      if (item.existencias <= 0) {
-        Swal.fire({
-          icon: 'error',
-          title: '¡Agotado!',
-          text: 'Este producto no tiene existencias disponibles.',
-          confirmButtonColor: '#ef4444'
-        })
-        return arr
-      }
-
+      // NO EXISTE: Agregamos nuevo
       return [
         ...arr,
         {
           pid: item.pid,
+          lote_id: loteId,
           cant: 1,
-          nombre: item.nombre,
+          nombre: item.nombre + nombreDisplay,
           precio: item.precio,
-          maxStock: item.existencias
+          es_servicio: item.es_servicio, // <--- GUARDAMOS LA ETIQUETA IMPORTANTE
+          maxStock: item.es_servicio ? null : maxStockDisp
         }
       ]
     })
+
     setQ('')
     setResults([])
     setTimeout(() => goTo(pages.length), 0)
+  }
+
+  const addFromSearch = async (item) => {
+    // CASO A: Es un producto con LOTES
+    if (!item.es_servicio && item.lotes && item.lotes.length > 0) {
+      const inputOptions = {}
+
+      // Filtramos solo lotes con cantidad > 0
+      item.lotes.forEach((l) => {
+        if (Number(l.cantidad) > 0) {
+          inputOptions[l.id] =
+            `Lote: ${l.lote} (Vence: ${l.vencimiento || '—'}) - Disp: ${l.cantidad}`
+        }
+      })
+
+      // Si todos los lotes están vacíos
+      if (Object.keys(inputOptions).length === 0) {
+        return Swal.fire({
+          icon: 'error',
+          title: 'Lotes Agotados',
+          text: 'Este producto tiene lotes registrados, pero todos están en 0.',
+          confirmButtonColor: '#ef4444'
+        })
+      }
+
+      // Popup para seleccionar lote
+      const { value: loteId } = await Swal.fire({
+        title: 'Selecciona el Lote',
+        text: `El producto "${item.nombre}" maneja lotes.`,
+        input: 'select',
+        inputOptions: inputOptions,
+        inputPlaceholder: 'Selecciona un lote',
+        showCancelButton: true,
+        confirmButtonColor: '#11A5A3',
+        cancelButtonText: 'Cancelar',
+        inputValidator: (value) => {
+          return !value && 'Debes seleccionar un lote'
+        }
+      })
+
+      if (!loteId) return
+
+      const loteSeleccionado = item.lotes.find((l) => String(l.id) === String(loteId))
+
+      agregarProductoAlEstado(
+        item,
+        loteSeleccionado.cantidad,
+        loteId,
+        ` (${loteSeleccionado.lote})`
+      )
+      return
+    }
+
+    // CASO B: Producto sin lotes sin stock
+    if (!item.es_servicio && item.existencias <= 0) {
+      return Swal.fire({
+        icon: 'error',
+        title: '¡Agotado!',
+        text: 'Este producto no tiene existencias disponibles.',
+        confirmButtonColor: '#ef4444'
+      })
+    }
+
+    // CASO C: Servicio o Producto con stock
+    agregarProductoAlEstado(item, item.existencias, null, '')
   }
 
   /* ---------- Submit ---------- */
@@ -200,6 +313,16 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       })
     }
 
+    console.log('--- [DEBUG 3] FRONTEND ENVIA ---')
+    console.log(
+      'Lista de productos a enviar:',
+      prods.map((p) => ({
+        nombre: p.nombre,
+        es_servicio: p.es_servicio,
+        tipo_dato: typeof p.es_servicio
+      }))
+    )
+
     try {
       setSubmitting(true)
       const saved = await createInvoice({
@@ -209,13 +332,13 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         nit: f.nit.trim(),
         condiciones: f.condiciones.trim(),
         ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
-        tipo_de_pago: f.tipo_de_pago, // <--- ENVIAMOS EL TIPO DE PAGO AL BACKEND
-        productos: prods
+        tipo_de_pago: f.tipo_de_pago,
+        productos: prods // Enviamos los productos con la etiqueta es_servicio
       })
 
       onCreate?.(saved)
 
-      // Limpiamos todo
+      // Limpieza post-guardado
       setF({
         cliente: '',
         direccion: '',
@@ -223,7 +346,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         dui: '',
         condiciones: '',
         nit: '',
-        tipo_de_pago: 'Efectivo' // <--- Resetear a efectivo
+        tipo_de_pago: 'Efectivo'
       })
       setProds([{ ...emptyProd }])
       setQ('')
@@ -332,7 +455,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                 <div className="absolute z-10 mt-2 w-full max-h-56 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-lg">
                   {results.map((r) => (
                     <button
-                      key={r.pid}
+                      key={`${r.pid}-${r.es_servicio ? 's' : 'p'}`}
                       type="button"
                       onClick={() => addFromSearch(r)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
@@ -359,9 +482,20 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                           {r.categoria ? (
                             <span className="text-neutral-400"> • {r.categoria}</span>
                           ) : null}
-                          <span className="text-xs text-blue-600 ml-2 font-bold">
-                            (Stock: {r.existencias})
-                          </span>
+
+                          {/* ETIQUETAS VISUALES EN BUSCADOR */}
+                          {r.es_servicio ? (
+                            <span className="text-xs text-purple-600 ml-2 font-bold bg-purple-50 px-1 rounded">
+                              (Servicio)
+                            </span>
+                          ) : (
+                            <span className="text-xs text-blue-600 ml-2 font-bold">
+                              (Stock: {r.existencias})
+                              {r.lotes && r.lotes.length > 0 && (
+                                <span className="text-amber-600 ml-1">[Lotes]</span>
+                              )}
+                            </span>
+                          )}
                         </span>
                       </div>
 
@@ -398,12 +532,15 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                       <InputGreen
                         type="number"
                         min="0"
-                        max={p.maxStock || 9999}
+                        // Si es servicio, input sin límite (999999). Si es producto, su stock.
+                        max={p.maxStock || 999999}
                         value={p.cant}
                         onChange={(e) => setProd(globalIndex, 'cant', e.target.value)}
                         placeholder="Cant."
                         className="col-span-2"
-                        title={p.maxStock ? `Máximo disponible: ${p.maxStock}` : ''}
+                        title={
+                          p.maxStock ? `Máximo disponible: ${p.maxStock}` : 'Servicio / Ilimitado'
+                        }
                       />
 
                       <div className="col-span-4 sm:col-span-5 relative">
@@ -413,9 +550,15 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                           placeholder="Brocha"
                           className="w-full"
                         />
-                        {p.maxStock !== null && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400 bg-white px-1">
+                        {/* Etiqueta flotante de stock o servicio */}
+                        {p.maxStock !== null && !p.es_servicio && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400 bg-white px-1 border border-neutral-100 rounded">
                             Max: {p.maxStock}
+                          </span>
+                        )}
+                        {p.es_servicio && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-purple-600 bg-purple-50 px-1 font-bold border border-purple-100 rounded">
+                            SERV
                           </span>
                         )}
                       </div>
@@ -484,7 +627,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
           <section className="snap-start mt-8 pb-2">
             <LabelSection>Tipo de pago</LabelSection>
-            {/* --- NUEVO CAMPO: TIPO DE PAGO --- */}
             <div className="mb-3"></div>
             <Field>
               <SelectGreen
@@ -493,11 +635,9 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
               >
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia">Transferencia</option>
-                {/* IMPORTANTE: El valor debe ser exacto al de la base de datos (sin acento en credito) */}
                 <option value="Tarjeta de credito">Tarjeta de Crédito</option>
               </SelectGreen>
             </Field>
-            {/* ---------------------------------- */}
           </section>
 
           {/* Resumen */}
@@ -567,7 +707,6 @@ function InputGreen({ className = '', ...props }) {
   )
 }
 
-// Nuevo Helper para el Select con el mismo estilo que InputGreen
 function SelectGreen({ className = '', children, ...props }) {
   return (
     <select

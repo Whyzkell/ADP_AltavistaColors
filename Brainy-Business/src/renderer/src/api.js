@@ -110,7 +110,9 @@ export async function createInvoice(payload) {
       producto_id: p.pid ?? null,
       nombre: String(p.nombre).trim(),
       cantidad: Number(p.cant),
-      precio: Number(p.precio)
+      precio: Number(p.precio),
+      lote_id: p.lote_id ?? null,
+      es_servicio: p.es_servicio
     }))
 
   if (items.length === 0) {
