@@ -21,6 +21,8 @@ import Ventas from './components/Paginas/Ventas.jsx'
 import Facturas from './components/Paginas/Facturas.jsx'
 import CreditoFiscal from './components/Paginas/CreditoFiscal.jsx'
 import Estadisticas from './components/Paginas/Estadisticas.jsx'
+import Servicios from './components/Paginas/Servicios'
+import Vencimientos from './components/Paginas/Vencimientos'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -43,6 +45,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/Facturas" element={<Facturas />} />
               <Route path="/CreditoFiscal" element={<CreditoFiscal />} />
               <Route path="/Estadisticas" element={<Estadisticas />} />
+              <Route path="/Servicios" element={<Servicios />} />
+              <Route path="/Vencimientos" element={<Vencimientos />} />
             </Route>
           </Route>
 

@@ -307,3 +307,46 @@ export async function getLowStockProducts() {
     throw new Error(msg)
   }
 }
+
+// --------- Servicios ---------
+export async function listServicios() {
+  const { data } = await api.get('/api/servicios')
+  return data
+}
+
+export async function createServicio(payload) {
+  const { data } = await api.post('/api/servicios', payload)
+  return data
+}
+
+export async function deleteServicio(id) {
+  const { data } = await api.delete(`/api/servicios/${id}`)
+  return data
+}
+
+export async function updateServicio(id, payload) {
+  const { data } = await api.put(`/api/servicios/${id}`, payload)
+  return data
+}
+
+// ... (sección Lotes) ...
+export async function createLote(payload) {
+  const { data } = await api.post('/api/lotes', payload)
+  return data
+}
+
+export async function updateLote(id, payload) {
+  const { data } = await api.put(`/api/lotes/${id}`, payload)
+  return data
+}
+
+export async function deleteLote(id) {
+  const { data } = await api.delete(`/api/lotes/${id}`)
+  return data
+}
+
+// NUEVA: Para la tabla principal
+export async function listLotes() {
+  const { data } = await api.get('/api/lotes')
+  return data
+}

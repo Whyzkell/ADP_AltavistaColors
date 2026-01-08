@@ -50,6 +50,10 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: err.message || 'Error interno del servidor' })
 })
 
+// --- RUTAS NUEVAS ---
+app.use('/api/servicios', require('./routes/servicios.routes'))
+app.use('/api/lotes', require('./routes/lotes.routes'))
+
 // 2. INICIO DEL SERVIDOR
 const PORT = process.env.PORT || 3001
 
