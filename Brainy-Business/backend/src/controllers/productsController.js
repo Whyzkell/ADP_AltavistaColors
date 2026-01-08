@@ -61,7 +61,7 @@ exports.list = async (req, res) => {
         FROM productos p
         ${whereProductos}
         ORDER BY p.id DESC
-        LIMIT 30
+        
     `
 
     // --- QUERY 2: SERVICIOS (Solo si es facturación) ---
