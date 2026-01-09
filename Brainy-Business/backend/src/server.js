@@ -54,6 +54,13 @@ app.use((err, _req, res, _next) => {
 app.use('/api/servicios', require('./routes/servicios.routes'))
 app.use('/api/lotes', require('./routes/lotes.routes'))
 
+const preciosRoutes = require('./routes/precios.routes')
+
+// ... (otros imports y configuraciones) ...
+
+// 2. Usar la ruta
+app.use('/api/precios', preciosRoutes)
+
 // 2. INICIO DEL SERVIDOR
 const PORT = process.env.PORT || 3001
 

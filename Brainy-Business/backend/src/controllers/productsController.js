@@ -5,9 +5,6 @@ const db = require('../db/index')
 exports.list = async (req, res) => {
   try {
     const q = (req.query.q || '').trim().toLowerCase()
-
-    // DETECTAR SI ES PARA FACTURACIÓN (scope=billing)
-    // Si es billing, buscamos en Productos Y Servicios. Si no, solo Productos.
     const isBilling = req.query.scope === 'billing'
 
     const params = []
@@ -16,32 +13,37 @@ exports.list = async (req, res) => {
 
     if (q) {
       params.push(`%${q}%`)
-      // Búsqueda en Productos
       whereProductos = `
         WHERE (lower(p.nombre) LIKE $1
-           OR lower(p.categoria) LIKE $1
-           OR CAST(p.codigo AS TEXT) LIKE $1)
+            OR lower(p.categoria) LIKE $1
+            OR CAST(p.codigo AS TEXT) LIKE $1)
       `
-      // Búsqueda en Servicios
       whereServicios = `
         WHERE lower(s.nombre) LIKE $1
-           OR lower(s.descripcion) LIKE $1
+            OR lower(s.descripcion) LIKE $1
       `
     }
 
-    // --- QUERY 1: PRODUCTOS (Inventario real) ---
-    // Agregamos 'false AS es_servicio' virtualmente
+    // --- QUERY 1: PRODUCTOS (Inventario + Precios) ---
     const sqlProductos = `
       SELECT 
           p.id AS id_producto,
           p.nombre,
           p.categoria,
-          p.precio_unit AS precio,
+          p.precio_unit AS precio, -- Precio Final (Venta)
           p.codigo,
           p.existencias,
           p.imagen,
-          false AS es_servicio,   -- <--- ETIQUETA VIRTUAL FALSE (Es un producto físico)
+          false AS es_servicio,
           p.creado_en,
+          
+          -- DATOS DE LA TABLA PRECIOS (JOIN)
+          COALESCE(pr.precio_sin_iva, 0) as precio_sin_iva,
+          COALESCE(pr.precio_con_iva, 0) as precio_con_iva,
+          COALESCE(pr.porcentaje_ganancia, 30) as porcentaje_ganancia,
+          COALESCE(pr.precio_con_ganancia, 0) as precio_con_ganancia,
+
+          -- SUBQUERY DE LOTES (Corregido: Sin puntos suspensivos)
           COALESCE(
             (
               SELECT json_agg(
@@ -58,14 +60,15 @@ exports.list = async (req, res) => {
             ), 
             '[]'::json
           ) AS lotes
+
         FROM productos p
+        LEFT JOIN precios pr ON p.id = pr.id_producto
         ${whereProductos}
         ORDER BY p.id DESC
-        
+        LIMIT 1000
     `
 
-    // --- QUERY 2: SERVICIOS (Solo si es facturación) ---
-    // Agregamos 'true AS es_servicio' virtualmente y simulamos campos de producto
+    // --- QUERY 2: SERVICIOS ---
     const sqlServicios = `
       SELECT 
         s.id AS id_producto,
@@ -73,44 +76,36 @@ exports.list = async (req, res) => {
         'Servicio' as categoria,
         s.precio_sugerido AS precio,
         'SERV' as codigo,
-        999999 as existencias,    -- Stock virtual ilimitado
+        999999 as existencias,
         null as imagen,
-        true AS es_servicio,      -- <--- ETIQUETA VIRTUAL TRUE (Es un servicio)
+        true AS es_servicio,
         s.creado_en,
+        
+        -- Datos Dummy de precios para Servicios
+        0 as precio_sin_iva,
+        0 as precio_con_iva,
+        0 as porcentaje_ganancia,
+        0 as precio_con_ganancia,
+
         '[]'::json as lotes
       FROM servicios s
       ${whereServicios}
       ORDER BY s.id DESC
-      LIMIT 30
+      LIMIT 1000
     `
 
     let resultados = []
 
     if (isBilling) {
-      // MODO FACTURA: Ejecutamos ambas consultas y unimos los resultados
       const [resProductos, resServicios] = await Promise.all([
         db.query(sqlProductos, params),
         db.query(sqlServicios, params)
       ])
-      // Ponemos servicios primero o después según prefieras, aquí los mezclamos
       resultados = [...resServicios.rows, ...resProductos.rows]
     } else {
-      // MODO NORMAL (Inventario): Solo buscamos productos
       const { rows } = await db.query(sqlProductos, params)
       resultados = rows
     }
-
-    // --- AGREGA ESTO ---
-    //console.log('--- [DEBUG 1] BACKEND BUSQUEDA ---')
-    //if (resultados.length > 0) {
-    // Imprimimos el primer resultado para ver si lleva la etiqueta
-    // console.log('Ejemplo de item encontrado:', {
-    //    nombre: resultados[0].nombre,
-    //    es_servicio: resultados[0].es_servicio,
-    //   tipo: typeof resultados[0].es_servicio
-    //  })
-    // }
-    // -------------------
 
     res.json(resultados)
   } catch (err) {
@@ -119,7 +114,7 @@ exports.list = async (req, res) => {
   }
 }
 
-// POST /api/products (Crear solo Producto)
+// POST /api/products (Crear)
 exports.create = async (req, res) => {
   try {
     const { nombre, categoria, precio, codigo, existencias } = req.body
@@ -138,7 +133,7 @@ exports.create = async (req, res) => {
   }
 }
 
-// PUT /api/products/:id (Actualizar solo Producto)
+// PUT /api/products/:id (Actualizar)
 exports.update = async (req, res) => {
   try {
     const { id } = req.params
@@ -150,7 +145,7 @@ exports.update = async (req, res) => {
 
     if (nuevaImagen) {
       query = `UPDATE productos
-                 SET nombre=$1, categoria=$2, precio_unit=$3, codigo=$4, existencias=$5, imagen=$6
+               SET nombre=$1, categoria=$2, precio_unit=$3, codigo=$4, existencias=$5, imagen=$6
                WHERE id=$7
                RETURNING id AS id_producto, nombre, categoria, precio_unit AS precio, codigo, existencias, imagen`
       params = [
@@ -164,7 +159,7 @@ exports.update = async (req, res) => {
       ]
     } else {
       query = `UPDATE productos
-                 SET nombre=$1, categoria=$2, precio_unit=$3, codigo=$4, existencias=$5
+               SET nombre=$1, categoria=$2, precio_unit=$3, codigo=$4, existencias=$5
                WHERE id=$6
                RETURNING id AS id_producto, nombre, categoria, precio_unit AS precio, codigo, existencias, imagen`
       params = [nombre, categoria, Number(precio), Number(codigo), Number(existencias), id]
@@ -180,7 +175,7 @@ exports.update = async (req, res) => {
   }
 }
 
-// DELETE /api/products/:id (Eliminar solo Producto)
+// DELETE /api/products/:id (Eliminar)
 exports.remove = async (req, res) => {
   try {
     const { id } = req.params

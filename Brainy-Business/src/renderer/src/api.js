@@ -367,3 +367,20 @@ export async function getExpiringBatches() {
     return []
   }
 }
+
+// --------- Precios (Nueva Tabla) ---------
+
+/**
+ * Guarda o actualiza los precios adicionales de un producto.
+ * @param {Object} payload - { id_producto, precio_sin_iva, precio_con_iva, porcentaje_ganancia, precio_con_ganancia }
+ */
+export async function savePrecios(payload) {
+  try {
+    const { data } = await api.post('/api/precios', payload)
+    return data
+  } catch (e) {
+    console.error('API Error savePrecios:', e.response?.data || e)
+    const msg = e.response?.data?.error || e.message || 'Error guardando configuración de precios'
+    throw new Error(msg)
+  }
+}
