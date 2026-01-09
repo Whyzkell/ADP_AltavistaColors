@@ -125,9 +125,12 @@ export async function createInvoice(payload) {
     dui: payload.dui?.trim(),
     nit: payload.nit?.trim(),
     condiciones: payload.condiciones?.trim() || null,
-
-    // --- NUEVO: Agregamos el tipo de pago aquí ---
     tipo_de_pago: payload.tipo_de_pago,
+
+    // --- CORRECCIÓN: AGREGAR ESTAS DOS LÍNEAS ---
+    // Sin esto, el backend nunca se entera del descuento
+    descuento_id: payload.descuento_id,
+    valor_descuento: payload.valor_descuento,
     // --------------------------------------------
 
     items,
@@ -383,4 +386,25 @@ export async function savePrecios(payload) {
     const msg = e.response?.data?.error || e.message || 'Error guardando configuración de precios'
     throw new Error(msg)
   }
+}
+
+// --------- Descuentos ---------
+export async function listDescuentos() {
+  const { data } = await api.get('/api/descuentos')
+  return data
+}
+
+export async function createDescuento(payload) {
+  const { data } = await api.post('/api/descuentos', payload)
+  return data
+}
+
+export async function updateDescuento(id, payload) {
+  const { data } = await api.put(`/api/descuentos/${id}`, payload)
+  return data
+}
+
+export async function deleteDescuento(id) {
+  const { data } = await api.delete(`/api/descuentos/${id}`)
+  return data
 }

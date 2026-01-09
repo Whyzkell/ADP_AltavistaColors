@@ -24,6 +24,7 @@ import Estadisticas from './components/Paginas/Estadisticas.jsx'
 import Servicios from './components/Paginas/Servicios'
 import Vencimientos from './components/Paginas/Vencimientos'
 import Precios from './components/Paginas/Precios.jsx'
+import Descuentos from './components/Paginas/Descuentos.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -49,6 +50,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="/Servicios" element={<Servicios />} />
               <Route path="/Vencimientos" element={<Vencimientos />} />
               <Route path="/Precios" element={<Precios />} />
+              <Route path="/Descuentos" element={<Descuentos />} />
             </Route>
           </Route>
 

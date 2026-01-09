@@ -45,7 +45,7 @@ export default function Sidebar({ className = '' }) {
         <SidebarLink label="Servicios" to="/Servicios" icon="resources/Services.png" />
         <SidebarLink label="Vencimientos" to="/Vencimientos" icon="resources/Calendar.png" />
         {/* ---------------------- */}
-
+        <SidebarLink label="Descuentos" to="/Descuentos" icon="resources/Descuentos.png" />
         <SidebarLink label="Ventas" to="/Ventas" icon="resources/Venta.png" />
         <SidebarLink label="Estadisticas" to="/Estadisticas" icon="resources/Chart_Line.png" />
 

@@ -35,20 +35,6 @@ exports.getOne = async (req, res) => {
 }
 
 exports.create = async (req, res) => {
-  // --- AGREGA ESTO AL PURO INICIO ---
-  /* console.log('--- [DEBUG 4] BACKEND RECIBE ---')
-  const incomingItems = req.body.items || req.body.productos || []
-  if (incomingItems.length > 0) {
-    console.log('Primer item recibido:', {
-      nombre: incomingItems[0].nombre,
-      es_servicio: incomingItems[0].es_servicio,
-      tipo: typeof incomingItems[0].es_servicio
-    })
-  } else {
-    console.log('No llegaron items o array vacío')
-  }*/
-  // ----------------------------------
-
   const {
     cliente = '',
     direccion = '',
@@ -58,14 +44,22 @@ exports.create = async (req, res) => {
     items: itemsRaw = [],
     productos: productosRaw = [],
     meta = {},
-    tipo_de_pago
+    tipo_de_pago,
+    // Datos del descuento
+    descuento_id = null,
+    valor_descuento = 0
   } = req.body
+
+  // --- DEBUG LOGS (Mira esto en tu terminal negra) ---
+  console.log('--- NUEVA FACTURA ---')
+  console.log('Cliente:', cliente)
+  console.log('Descuento recibido ($):', valor_descuento)
+  // ---------------------------------------------------
 
   if (!cliente.trim()) return res.status(400).json({ error: 'Cliente requerido' })
 
+  // 1. Limpieza de items
   const src = Array.isArray(itemsRaw) && itemsRaw.length ? itemsRaw : productosRaw
-
-  // 1. Mapeo y limpieza de datos
   const items = (src || [])
     .map((it) => ({
       pid: it.pid || it.producto_id || null,
@@ -73,79 +67,57 @@ exports.create = async (req, res) => {
       cantidad: Number(it.cantidad ?? it.cant ?? 0),
       precio: Number(it.precio ?? it.precio_unit ?? 0),
       lote_id: it.lote_id || null,
-      // Convertimos es_servicio a booleano real
       es_servicio: it.es_servicio === true || String(it.es_servicio) === 'true'
     }))
-    .filter(
-      (it) =>
-        it.nombre && Number.isFinite(it.cantidad) && it.cantidad > 0 && Number.isFinite(it.precio)
-    )
+    .filter((it) => it.cantidad > 0 && it.precio >= 0)
 
-  if (items.length === 0) {
-    return res.status(400).json({ error: 'Debe enviar al menos un item' })
-  }
+  if (items.length === 0) return res.status(400).json({ error: 'Sin items' })
 
   const userId = req.user.id
   const client = await pool.connect()
 
   try {
-    // LOG DE SEGURIDAD: Verifica en tu terminal si es_servicio llega como true
-    console.log('Procesando Factura Items:', JSON.stringify(items, null, 2))
-
     await client.query('BEGIN')
 
-    // 2. Crear Cabecera de Factura
+    // 2. Insertar Factura (Total inicia en 0)
     const {
       rows: [fact]
     } = await client.query(
       `INSERT INTO facturas
-          (numero, cliente, direccion, dui, nit, condiciones, usuario_id, fecha_emision, total, payload, tipo_de_pago)
-        VALUES (NULL, $1, $2, $3, $4, $5, $6, CURRENT_DATE, 0, $7, $8)
+          (numero, cliente, direccion, dui, nit, condiciones, usuario_id, fecha_emision, total, payload, tipo_de_pago, descuento_id, valor_descuento)
+        VALUES (NULL, $1, $2, $3, $4, $5, $6, CURRENT_DATE, 0, $7, $8, $9, $10)
         RETURNING id, numero`,
-      [cliente, direccion, dui, nit, condiciones || null, userId, meta, tipo_de_pago || 'Efectivo']
+      [
+        cliente,
+        direccion,
+        dui,
+        nit,
+        condiciones || null,
+        userId,
+        meta,
+        tipo_de_pago || 'Efectivo',
+        descuento_id || null, // $9
+        Number(valor_descuento || 0) // $10
+      ]
     )
 
-    // 3. Procesar Items (Separación Producto vs Servicio)
+    // 3. Insertar Items
     for (const it of items) {
-      let prodId = null
-      let servId = null
+      let prodId = it.es_servicio ? null : it.pid
+      let servId = it.es_servicio ? it.pid : null
 
-      if (it.es_servicio) {
-        // ES SERVICIO: Guardamos ID en servicio_id, dejamos producto_id NULL
-        servId = it.pid
-        prodId = null
-      } else {
-        // ES PRODUCTO: Guardamos ID en producto_id, dejamos servicio_id NULL
-        prodId = it.pid
-        servId = null
-      }
-
-      // Insertar Ítem
-      // OJO: No enviamos 'total' (la BD lo calcula). Sí enviamos 'lote_id'.
       await client.query(
-        `INSERT INTO factura_items 
-          (factura_id, producto_id, servicio_id, lote_id, nombre, cantidad, precio_unit)
+        `INSERT INTO factura_items (factura_id, producto_id, servicio_id, lote_id, nombre, cantidad, precio_unit)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          fact.id,
-          prodId, // Puede ser NULL
-          servId, // Puede ser NULL
-          it.lote_id,
-          it.nombre,
-          it.cantidad,
-          it.precio
-        ]
+        [fact.id, prodId, servId, it.lote_id, it.nombre, it.cantidad, it.precio]
       )
 
-      // 4. Descontar Stock (SOLO SI ES PRODUCTO FÍSICO)
+      // Descontar inventario
       if (!it.es_servicio && prodId) {
-        // A. Inventario General
         await client.query(
           `UPDATE productos SET existencias = GREATEST(existencias - $1, 0) WHERE id = $2`,
           [it.cantidad, prodId]
         )
-
-        // B. Inventario de Lotes
         if (it.lote_id) {
           await client.query(
             `UPDATE lotes SET cantidad_actual = GREATEST(cantidad_actual - $1, 0) WHERE id = $2`,
@@ -155,7 +127,8 @@ exports.create = async (req, res) => {
       }
     }
 
-    // 5. Actualizar Total Global (Sumando lo que la BD calculó)
+    // 4. CALCULAR TOTAL FINAL
+    // Obtenemos la suma bruta de los items (Subtotal)
     const {
       rows: [resSum]
     } = await client.query(
@@ -163,24 +136,24 @@ exports.create = async (req, res) => {
       [fact.id]
     )
 
-    await client.query(`UPDATE facturas SET total = $1 WHERE id = $2`, [
-      resSum.grand_total,
-      fact.id
-    ])
+    const subtotal = Number(resSum.grand_total)
+    const descuento = Number(valor_descuento || 0)
+    const totalFinal = Math.max(0, subtotal - descuento)
+
+    console.log(
+      `Cálculo: Subtotal (${subtotal}) - Descuento (${descuento}) = Total Final (${totalFinal})`
+    )
+
+    // 5. ACTUALIZAR FACTURA CON EL TOTAL RESTADO
+    await client.query(`UPDATE facturas SET total = $1 WHERE id = $2`, [totalFinal, fact.id])
 
     await client.query('COMMIT')
-    return res.json({ id: fact.id, numero: fact.numero, total: resSum.grand_total })
+
+    return res.json({ id: fact.id, numero: fact.numero, total: totalFinal })
   } catch (e) {
     await client.query('ROLLBACK')
-    console.error('create invoice error:', e)
-
-    // Manejo de error de Llave Foránea (FK)
-    if (e.code === '23503') {
-      return res.status(400).json({
-        error: `Error de integridad: Estás intentando guardar un ID que no existe en la tabla de Productos o Servicios.`
-      })
-    }
-    return res.status(500).json({ error: e.message })
+    console.error('Error creando factura:', e)
+    res.status(500).json({ error: e.message })
   } finally {
     client.release()
   }

@@ -10,72 +10,81 @@ const PAGE_SIZE = 6
 const TicketDesign = ({ data }) => {
   if (!data) return null
   const items = data.items || []
-  
-  // Calcular total si no viene
-  const totalCalculado = items.reduce((sum, item) => sum + (Number(item.cantidad) * Number(item.precio_unit)), 0)
-  const totalFinal = Number(data.total || totalCalculado)
+
+  // 1. Calcular Subtotal (Suma de productos)
+  const subtotalCalculado = items.reduce(
+    (sum, item) => sum + Number(item.cantidad) * Number(item.precio_unit),
+    0
+  )
+
+  // 2. Obtener Descuento y Total Final
+  // El backend manda 'valor_descuento' o 'descuento' según cómo lo hayas guardado
+  const descuento = Number(data.valor_descuento || data.descuento || 0)
+
+  // Si el backend trae el total, lo usamos. Si no, lo calculamos.
+  const totalFinal = Number(data.total) || subtotalCalculado - descuento
 
   return (
     <div className="text-black font-mono text-[12px] leading-tight">
-      {/* CORRECCIÓN IMPORTANTE DE ESTILOS:
-          Usamos 'visibility' y 'position: absolute' para sacar el ticket 
-          del flujo normal y asegurarnos de que sea lo único que se ve.
-      */}
       <style>
         {`
           @media print {
             @page { margin: 0; size: auto; }
-            
-            /* 1. Ocultamos visualmente TODO el contenido del body */
-            body {
-              visibility: hidden;
-            }
-            
-            /* 2. Hacemos visible EXPLICITAMENTE el contenedor del ticket */
+            body { visibility: hidden; }
             .print-container {
               visibility: visible !important;
               position: absolute !important;
               left: 0 !important;
               top: 0 !important;
-              width: 72mm !important; /* Ajustado para margen seguro en papel de 80mm */
+              width: 72mm !important;
               margin: 0 !important;
               padding: 2mm !important;
               background: white;
             }
-            
-            /* 3. Aseguramos que todo lo de adentro del ticket sea visible */
-            .print-container * {
-              visibility: visible !important;
-            }
+            .print-container * { visibility: visible !important; }
           }
         `}
       </style>
 
       <div className="text-center mb-4">
-        <div className="flex items-center justify-center">
-          <img src="resources/Logo.png" className="w-[220px]" alt="Logo" />
+        <div className="flex items-center justify-center mb-2">
+          {/* Asegúrate que esta ruta sea correcta en tu carpeta public */}
+          <img src="resources/Logo.png" className="w-[150px]" alt="Logo" />
         </div>
         <p>--------------------------------</p>
         <p className="font-bold">FACTURA #: {data.numero || data.id}</p>
-        <p>{new Date().toLocaleDateString()} - {new Date().toLocaleTimeString()}</p>
+        <p>
+          {new Date().toLocaleDateString()} - {new Date().toLocaleTimeString()}
+        </p>
       </div>
 
       <div className="mb-2">
-        <p><strong>Cliente:</strong> {data.cliente}</p>
-        {data.dui && <p><strong>DUI:</strong> {data.dui}</p>}
-        {data.nit && <p><strong>NIT:</strong> {data.nit}</p>}
-        <p><strong>Pago:</strong> {data.tipo_de_pago || 'Efectivo'}</p>
+        <p>
+          <strong>Cliente:</strong> {data.cliente}
+        </p>
+        {data.dui && (
+          <p>
+            <strong>DUI:</strong> {data.dui}
+          </p>
+        )}
+        {data.nit && (
+          <p>
+            <strong>NIT:</strong> {data.nit}
+          </p>
+        )}
+        <p>
+          <strong>Pago:</strong> {data.tipo_de_pago || 'Efectivo'}
+        </p>
       </div>
 
       <p className="mb-1">--------------------------------</p>
-      
-      {/* Encabezados Tabla Ticket */}
+
       <div className="flex font-bold mb-1">
         <span className="w-8">Cant</span>
         <span className="flex-1">Desc</span>
         <span className="w-12 text-right">Total</span>
       </div>
-      
+
       <p className="mb-1">--------------------------------</p>
 
       {/* Items */}
@@ -96,22 +105,38 @@ const TicketDesign = ({ data }) => {
 
       <p className="mb-2">--------------------------------</p>
 
-      <div className="flex justify-between text-lg font-bold">
-        <span>TOTAL:</span>
-        <span>${totalFinal.toFixed(2)}</span>
+      {/* --- SECCIÓN TOTALES TICKET --- */}
+      <div className="flex flex-col gap-1 text-right">
+        {descuento > 0 && (
+          <>
+            <div className="flex justify-between text-xs">
+              <span>Subtotal:</span>
+              <span>${subtotalCalculado.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-xs font-bold">
+              <span>Descuento:</span>
+              <span>- ${descuento.toFixed(2)}</span>
+            </div>
+            <p className="mb-1 border-b border-black border-dashed my-1"></p>
+          </>
+        )}
+
+        <div className="flex justify-between text-lg font-bold">
+          <span>TOTAL:</span>
+          <span>${totalFinal.toFixed(2)}</span>
+        </div>
       </div>
 
       <div className="mt-6 text-center text-[10px] space-y-1">
         <p>¡Gracias por su compra!</p>
-        
-        <p className="pt-2">.</p> {/* Punto final para asegurar margen inferior */}
+        <p className="pt-2">.</p>
       </div>
     </div>
   )
 }
 
 /* ===========================================
- * Helpers de UI (Vista Pantalla)
+ * Helpers de UI
  * =========================================== */
 function Field({ label, children, small = false }) {
   return (
@@ -136,7 +161,10 @@ function InputReadOnly({ className = '', ...props }) {
     <input
       {...props}
       readOnly
-      className={'h-11 w-full rounded-xl px-3 ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none ' + className}
+      className={
+        'h-11 w-full rounded-xl px-3 ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none ' +
+        className
+      }
     />
   )
 }
@@ -149,9 +177,7 @@ function Dots({ total, active, onClick }) {
           key={i}
           type="button"
           onClick={() => onClick(i)}
-          className={`h-2.5 w-2.5 rounded-full transition ${
-            i === active ? 'bg-neutral-800' : 'bg-neutral-300'
-          }`}
+          className={`h-2.5 w-2.5 rounded-full transition ${i === active ? 'bg-neutral-800' : 'bg-neutral-300'}`}
         />
       ))}
     </div>
@@ -172,11 +198,21 @@ export default function VerFacturaModal({ open, onClose, data }) {
   const f = data || {}
   const items = data?.items || []
 
+  // --- LÓGICA DE RESUMEN ACTUALIZADA ---
   const resumen = useMemo(() => {
     const cantidad = items.reduce((a, b) => a + Number(b.cantidad || 0), 0)
-    const total = Number(data?.total || 0)
-    return { cantidad, total }
-  }, [items, data?.total])
+
+    // Total final que viene de la BD
+    const totalFinal = Number(data?.total || 0)
+
+    // Descuento guardado
+    const descuento = Number(data?.valor_descuento || data?.descuento || 0)
+
+    // Reconstruimos el subtotal para mostrarlo
+    const subtotal = totalFinal + descuento
+
+    return { cantidad, totalFinal, descuento, subtotal }
+  }, [items, data])
 
   /* ---------- Paginación ---------- */
   const pages = chunk(items, PAGE_SIZE)
@@ -194,21 +230,32 @@ export default function VerFacturaModal({ open, onClose, data }) {
 
   return (
     <>
-      {/* 1. COMPONENTE MODAL (Visible en pantalla, oculto al imprimir) */}
+      {/* 1. COMPONENTE MODAL (Visible en pantalla) */}
       <div className="print:hidden">
         <ModalFactura open={open} onClose={onClose} title={`Factura No. ${f.numero || f.id || ''}`}>
           <div className="space-y-8">
             <div className="max-h-[55vh] overflow-y-auto snap-y snap-mandatory pr-1">
-              
               {/* Datos del cliente */}
               <section className="snap-start mt-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Field label="Cliente"><InputReadOnly value={f.cliente || ''} /></Field>
-                  <Field label="Dirección"><InputReadOnly value={f.direccion || ''} /></Field>
-                  <Field label="Venta a cuenta de"><InputReadOnly value={f.payload?.ventaCuentaDe || ''} /></Field>
-                  <Field label="DUI"><InputReadOnly value={f.dui || ''} /></Field>
-                  <Field label="Condiciones de pago"><InputReadOnly value={f.condiciones || ''} /></Field>
-                  <Field label="NIT"><InputReadOnly value={f.nit || ''} /></Field>
+                  <Field label="Cliente">
+                    <InputReadOnly value={f.cliente || ''} />
+                  </Field>
+                  <Field label="Dirección">
+                    <InputReadOnly value={f.direccion || ''} />
+                  </Field>
+                  <Field label="Venta a cuenta de">
+                    <InputReadOnly value={f.payload?.ventaCuentaDe || ''} />
+                  </Field>
+                  <Field label="DUI">
+                    <InputReadOnly value={f.dui || ''} />
+                  </Field>
+                  <Field label="Condiciones de pago">
+                    <InputReadOnly value={f.condiciones || ''} />
+                  </Field>
+                  <Field label="NIT">
+                    <InputReadOnly value={f.nit || ''} />
+                  </Field>
                 </div>
               </section>
 
@@ -225,33 +272,81 @@ export default function VerFacturaModal({ open, onClose, data }) {
 
               {/* Filas paginadas */}
               {pages.map((rows, idx) => (
-                <section key={idx} ref={(el) => (pageRefs.current[idx] = el)} className="snap-start mt-2">
+                <section
+                  key={idx}
+                  ref={(el) => (pageRefs.current[idx] = el)}
+                  className="snap-start mt-2"
+                >
                   <div className="space-y-3 w-full">
                     {rows.map((p, i) => (
                       <div key={p.id || i} className="grid grid-cols-12 gap-2 items-center">
                         <InputReadOnly value={p.cantidad} className="col-span-2" />
                         <InputReadOnly value={p.nombre} className="col-span-5" />
-                        <InputReadOnly value={`$${Number(p.precio_unit).toFixed(2)}`} className="col-span-2" />
-                        <InputReadOnly value={`$${(Number(p.cantidad) * Number(p.precio_unit)).toFixed(2)}`} className="col-span-3" />
+                        <InputReadOnly
+                          value={`$${Number(p.precio_unit).toFixed(2)}`}
+                          className="col-span-2"
+                        />
+                        <InputReadOnly
+                          value={`$${(Number(p.cantidad) * Number(p.precio_unit)).toFixed(2)}`}
+                          className="col-span-3"
+                        />
                       </div>
                     ))}
                   </div>
                   {pages.length > 1 && (
                     <div className="flex items-center justify-between mt-3">
-                      <button type="button" onClick={() => goTo(pageIdx - 1)} className="px-3 py-1.5 rounded-lg text-sm ring-1 ring-neutral-300 hover:bg-neutral-50">▲</button>
+                      <button
+                        type="button"
+                        onClick={() => goTo(pageIdx - 1)}
+                        className="px-3 py-1.5 rounded-lg text-sm ring-1 ring-neutral-300 hover:bg-neutral-50"
+                      >
+                        ▲
+                      </button>
                       <Dots total={pages.length} active={pageIdx} onClick={goTo} />
-                      <button type="button" onClick={() => goTo(pageIdx + 1)} className="px-3 py-1.5 rounded-lg text-sm ring-1 ring-neutral-300 hover:bg-neutral-50">▼</button>
+                      <button
+                        type="button"
+                        onClick={() => goTo(pageIdx + 1)}
+                        className="px-3 py-1.5 rounded-lg text-sm ring-1 ring-neutral-300 hover:bg-neutral-50"
+                      >
+                        ▼
+                      </button>
                     </div>
                   )}
                 </section>
               ))}
 
-              {/* Resumen */}
+              {/* Resumen Financiero Actualizado */}
               <section className="snap-start mt-8 pb-2">
                 <LabelSection>Resumen</LabelSection>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-3">
-                  <Field small label="Cantidad de productos"><InputReadOnly value={resumen.cantidad || ''} /></Field>
-                  <Field small label="Total final"><InputReadOnly value={`$${resumen.total.toFixed(2)}`} /></Field>
+                  <Field small label="Cantidad de productos">
+                    <InputReadOnly value={resumen.cantidad || ''} />
+                  </Field>
+
+                  {/* SI HAY DESCUENTO, MOSTRAMOS EL DESGLOSE */}
+                  {resumen.descuento > 0 ? (
+                    <>
+                      <Field small label="Subtotal">
+                        <InputReadOnly value={`$${resumen.subtotal.toFixed(2)}`} />
+                      </Field>
+                      <Field small label="Descuento Aplicado">
+                        <InputReadOnly
+                          value={`- $${resumen.descuento.toFixed(2)}`}
+                          className="text-red-600 font-bold bg-red-50"
+                        />
+                      </Field>
+                      <Field small label="Total Final">
+                        <InputReadOnly
+                          value={`$${resumen.totalFinal.toFixed(2)}`}
+                          className="font-bold text-emerald-700 bg-emerald-50"
+                        />
+                      </Field>
+                    </>
+                  ) : (
+                    <Field small label="Total Final">
+                      <InputReadOnly value={`$${resumen.totalFinal.toFixed(2)}`} />
+                    </Field>
+                  )}
                 </div>
               </section>
             </div>
@@ -276,8 +371,7 @@ export default function VerFacturaModal({ open, onClose, data }) {
         </ModalFactura>
       </div>
 
-      {/* 2. COMPONENTE TICKET (Oculto en pantalla, Visible al imprimir) */}
-      {/* Usamos la clase 'print-container' para que el CSS de arriba la detecte */}
+      {/* 2. COMPONENTE TICKET (Visible al imprimir) */}
       <div className="print-container hidden print:block">
         <TicketDesign data={data} />
       </div>

@@ -1,7 +1,7 @@
 // src/renderer/src/components/Modales/CreateFacturaModal.jsx
 import React, { useMemo, useRef, useState, useEffect } from 'react'
 import ModalFactura from './ModalFactura.jsx'
-import { createInvoice } from '../../api'
+import { createInvoice, listDescuentos } from '../../api'
 import Swal from 'sweetalert2'
 
 // <--- URL para cargar las fotos
@@ -43,9 +43,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         if (k === 'cant') {
           let val = Number.isNaN(Number(v)) ? 0 : Number(v)
 
-          // VALIDACIÓN DE STOCK:
-          // Solo validamos si maxStock TIENE un valor numérico.
-          // Si es un servicio (es_servicio=true), maxStock es null, así que no entra aquí.
+          // VALIDACIÓN DE STOCK
           if (p.maxStock !== null && p.maxStock !== undefined) {
             if (val > p.maxStock) {
               Swal.fire({
@@ -70,11 +68,77 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
   const totalFila = (p) => Number(p.cant || 0) * Number(p.precio || 0)
 
-  const resumen = useMemo(() => {
-    const cantidad = prods.reduce((a, b) => a + Number(b.cant || 0), 0)
-    const total = prods.reduce((a, b) => a + totalFila(b), 0)
-    return { cantidad, total }
+  // Subtotal de productos (Antes de descuentos)
+  const subtotalProductos = useMemo(() => {
+    return prods.reduce((a, b) => a + totalFila(b), 0)
   }, [prods])
+
+  const cantidadProductos = useMemo(() => {
+    return prods.reduce((a, b) => a + Number(b.cant || 0), 0)
+  }, [prods])
+
+  /* ---------- LÓGICA DE DESCUENTOS ---------- */
+  const [dbDescuentos, setDbDescuentos] = useState([]) // Lista cargada de la BD
+  const [appliedDescuentos, setAppliedDescuentos] = useState([]) // Descuentos aplicados a esta factura
+  const [qDesc, setQDesc] = useState('') // Buscador descuentos
+  const [showManualDesc, setShowManualDesc] = useState(false) // Toggle form manual
+  const [manualDesc, setManualDesc] = useState({ tipo: 'Porcentual', cantidad: '' })
+
+  // Cargar descuentos al abrir
+  useEffect(() => {
+    if (open) {
+      listDescuentos()
+        .then((data) => setDbDescuentos(data.filter((d) => d.activo)))
+        .catch((err) => console.error('Error cargando descuentos:', err))
+    }
+  }, [open])
+
+  // Filtrar descuentos para el buscador
+  const filteredDescuentos = useMemo(() => {
+    if (!qDesc.trim()) return []
+    return dbDescuentos.filter((d) => d.nombre.toLowerCase().includes(qDesc.toLowerCase()))
+  }, [qDesc, dbDescuentos])
+
+  // Agregar descuento (DB o Manual)
+  const addDiscount = (desc) => {
+    setAppliedDescuentos((prev) => [...prev, desc])
+    setQDesc('')
+    setManualDesc({ tipo: 'Porcentual', cantidad: '' })
+    setShowManualDesc(false)
+  }
+
+  // Eliminar descuento aplicado
+  const removeDiscount = (idx) => {
+    setAppliedDescuentos((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  // CALCULO DEL TOTAL FINAL Y VALOR DESCONTADO
+  const { valorDescuentoTotal, totalFinal } = useMemo(() => {
+    let totalDesc = 0
+
+    appliedDescuentos.forEach((d) => {
+      let val = 0
+      const amount = Number(d.cantidad)
+      if (d.tipo === 'Porcentual') {
+        // Porcentaje sobre el subtotal de productos
+        val = subtotalProductos * (amount / 100)
+      } else {
+        // Monto fijo
+        val = amount
+      }
+      totalDesc += val
+    })
+
+    // Validar que no sea negativo
+    // Si el descuento es mayor al subtotal, el descuento real es igual al subtotal (Total = 0)
+    const realDiscount = Math.min(totalDesc, subtotalProductos)
+    const final = subtotalProductos - realDiscount
+
+    return {
+      valorDescuentoTotal: realDiscount,
+      totalFinal: Math.max(0, final)
+    }
+  }, [subtotalProductos, appliedDescuentos])
 
   /* ---------- Paginación vertical (snap) ---------- */
   const pages = chunk(prods, PAGE_SIZE)
@@ -86,7 +150,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     pageRefs.current[clamped]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  /* ---------- Buscador con autocompletado ---------- */
+  /* ---------- Buscador Productos ---------- */
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState([])
@@ -102,11 +166,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     const t = setTimeout(async () => {
       try {
         setBusy(true)
-
-        // 1. Obtenemos el token para autenticarnos
         const token = localStorage.getItem('token')
-
-        // 2. Hacemos el fetch DIRECTO enviando scope=billing
         const response = await fetch(`${API_BASE}/api/products?q=${text}&scope=billing`, {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -114,31 +174,17 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           }
         })
 
-        if (!response.ok) {
-          if (response.status === 401) throw new Error('Sesión expirada')
-          throw new Error('Error buscando productos')
-        }
-
+        if (!response.ok) throw new Error('Error buscando productos')
         const rows = await response.json()
 
-        console.log('--- [DEBUG 2] FRONTEND RECIBE SEARCH ---')
-        if (rows.length > 0) {
-          console.log('Item crudo desde API:', rows[0])
-        }
-
-        // 3. Mapeamos la respuesta
         const mapped = rows.map((r) => ({
-          pid: r.id_producto || r.id, // Aseguramos tomar el ID correcto
+          pid: r.id_producto || r.id,
           nombre: r.nombre,
           precio: Number(r.precio ?? r.precio_unit ?? 0),
           codigo: r.codigo,
           categoria: r.categoria,
-
-          // --- AQUÍ RECIBIMOS LA ETIQUETA VIRTUAL DEL BACKEND ---
           es_servicio: r.es_servicio === true || String(r.es_servicio) === 'true',
-
           lotes: r.lotes || [],
-          // Si es servicio, stock infinito visual (999999). Si es producto, su stock real.
           existencias:
             r.es_servicio === true || String(r.es_servicio) === 'true'
               ? 999999
@@ -146,7 +192,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           imagen: r.imagen
         }))
 
-        // Filtro local adicional por seguridad visual
         const needle = text.toLowerCase()
         const local = mapped.filter((r) => {
           const n = (r.nombre || '').toLowerCase()
@@ -157,7 +202,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
         if (alive) setResults(local.slice(0, 50))
       } catch (e) {
-        console.error('Buscador error:', e)
+        console.error(e)
         if (alive) setResults([])
       } finally {
         if (alive) setBusy(false)
@@ -170,22 +215,15 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     }
   }, [q])
 
-  /* ------------------------------------------------------------------
-     LÓGICA PRINCIPAL DE AGREGAR PRODUCTO (Servicios + Lotes)
-     ------------------------------------------------------------------ */
   const agregarProductoAlEstado = (item, maxStockDisp, loteId = null, nombreDisplay = '') => {
     setProds((arr) => {
-      // Buscamos coincidencia exacta: mismo ID, mismo lote y mismo tipo (servicio/producto)
       const idx = arr.findIndex(
         (p) => p.pid === item.pid && p.lote_id == loteId && p.es_servicio === item.es_servicio
       )
 
       if (idx !== -1) {
-        // YA EXISTE: Sumamos 1
         const copy = [...arr]
         const currentCant = Number(copy[idx].cant || 0)
-
-        // Solo validamos stock si NO es servicio
         if (!item.es_servicio && currentCant + 1 > maxStockDisp) {
           Swal.fire({
             icon: 'warning',
@@ -195,7 +233,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           })
           return copy
         }
-
         copy[idx] = {
           ...copy[idx],
           cant: currentCant + 1,
@@ -204,7 +241,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         return copy
       }
 
-      // NO EXISTE: Agregamos nuevo
       return [
         ...arr,
         {
@@ -213,23 +249,19 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
           cant: 1,
           nombre: item.nombre + nombreDisplay,
           precio: item.precio,
-          es_servicio: item.es_servicio, // <--- GUARDAMOS LA ETIQUETA IMPORTANTE
+          es_servicio: item.es_servicio,
           maxStock: item.es_servicio ? null : maxStockDisp
         }
       ]
     })
-
     setQ('')
     setResults([])
     setTimeout(() => goTo(pages.length), 0)
   }
 
   const addFromSearch = async (item) => {
-    // CASO A: Es un producto con LOTES
     if (!item.es_servicio && item.lotes && item.lotes.length > 0) {
       const inputOptions = {}
-
-      // Filtramos solo lotes con cantidad > 0
       item.lotes.forEach((l) => {
         if (Number(l.cantidad) > 0) {
           inputOptions[l.id] =
@@ -237,7 +269,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         }
       })
 
-      // Si todos los lotes están vacíos
       if (Object.keys(inputOptions).length === 0) {
         return Swal.fire({
           icon: 'error',
@@ -247,7 +278,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         })
       }
 
-      // Popup para seleccionar lote
       const { value: loteId } = await Swal.fire({
         title: 'Selecciona el Lote',
         text: `El producto "${item.nombre}" maneja lotes.`,
@@ -257,15 +287,11 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         showCancelButton: true,
         confirmButtonColor: '#11A5A3',
         cancelButtonText: 'Cancelar',
-        inputValidator: (value) => {
-          return !value && 'Debes seleccionar un lote'
-        }
+        inputValidator: (value) => !value && 'Debes seleccionar un lote'
       })
 
       if (!loteId) return
-
       const loteSeleccionado = item.lotes.find((l) => String(l.id) === String(loteId))
-
       agregarProductoAlEstado(
         item,
         loteSeleccionado.cantidad,
@@ -275,7 +301,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       return
     }
 
-    // CASO B: Producto sin lotes sin stock
     if (!item.es_servicio && item.existencias <= 0) {
       return Swal.fire({
         icon: 'error',
@@ -285,7 +310,6 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       })
     }
 
-    // CASO C: Servicio o Producto con stock
     agregarProductoAlEstado(item, item.existencias, null, '')
   }
 
@@ -304,27 +328,25 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
       })
     }
 
-    if (prods.length === 0 || resumen.total <= 0) {
+    if (prods.length === 0 || totalFinal < 0) {
+      // Permitimos 0 si es 100% descuento
       return Swal.fire({
         icon: 'warning',
-        title: 'Factura Vacía',
-        text: 'Agrega al menos 1 producto con monto válido',
+        title: 'Factura Inválida',
+        text: 'Verifica los productos y descuentos.',
         confirmButtonColor: '#11A5A3'
       })
     }
 
-    console.log('--- [DEBUG 3] FRONTEND ENVIA ---')
-    console.log(
-      'Lista de productos a enviar:',
-      prods.map((p) => ({
-        nombre: p.nombre,
-        es_servicio: p.es_servicio,
-        tipo_dato: typeof p.es_servicio
-      }))
-    )
-
     try {
       setSubmitting(true)
+
+      // Decidimos qué ID de descuento enviar:
+      // Si hay SOLO UN descuento aplicado y viene de la BD (tiene ID), lo mandamos.
+      // Si son varios, o son manuales, mandamos null (pero el valor_descuento siempre va).
+      const singleDbDiscount =
+        appliedDescuentos.length === 1 && appliedDescuentos[0].id ? appliedDescuentos[0].id : null
+
       const saved = await createInvoice({
         cliente: f.cliente.trim(),
         direccion: f.direccion.trim(),
@@ -333,12 +355,16 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         condiciones: f.condiciones.trim(),
         ventaCuentaDe: f.ventaCuentaDe?.trim() || null,
         tipo_de_pago: f.tipo_de_pago,
-        productos: prods // Enviamos los productos con la etiqueta es_servicio
+        productos: prods,
+
+        // DATOS DE DESCUENTO
+        descuento_id: singleDbDiscount,
+        valor_descuento: valorDescuentoTotal
       })
 
       onCreate?.(saved)
 
-      // Limpieza post-guardado
+      // Limpieza
       setF({
         cliente: '',
         direccion: '',
@@ -349,6 +375,7 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
         tipo_de_pago: 'Efectivo'
       })
       setProds([{ ...emptyProd }])
+      setAppliedDescuentos([]) // Limpiar descuentos
       setQ('')
       setResults([])
       onClose?.()
@@ -368,8 +395,8 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
   return (
     <ModalFactura open={open} onClose={onClose} title="Crear Factura">
       <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="max-h-[55vh] overflow-y-auto snap-y snap-mandatory pr-1">
-          {/* Datos del cliente */}
+        <div className="max-h-[60vh] overflow-y-auto snap-y snap-mandatory pr-2 pb-10">
+          {/* 1. Datos Cliente */}
           <section className="snap-start mt-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Field label="Cliente">
@@ -400,11 +427,11 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
                   placeholder="XXXXXXXX-X"
                 />
               </Field>
-              <Field label="Condiciones de pago">
+              <Field label="Condiciones">
                 <InputGreen
                   value={f.condiciones}
                   onChange={(e) => up('condiciones', e.target.value)}
-                  placeholder="Condiciones de pago"
+                  placeholder="Pago inmediato..."
                 />
               </Field>
               <Field label="NIT">
@@ -417,258 +444,305 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
             </div>
           </section>
 
-          {/* Productos */}
+          {/* 2. Productos */}
           <section className="snap-start mt-8">
             <LabelSection>Productos</LabelSection>
 
-            {/* Buscador con sugerencias */}
-            <div className="relative mt-3">
+            {/* Buscador Productos */}
+            <div className="relative mt-3 z-20">
               <div className="flex items-center gap-2">
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar producto por nombre / categoría / código"
-                  className="h-9 w-full rounded-full px-4 text-sm ring-1 ring-neutral-200 bg-white outline-none"
+                  placeholder="Buscar producto..."
+                  className="h-9 w-full rounded-full px-4 text-sm ring-1 ring-neutral-200 bg-white outline-none focus:ring-emerald-500"
                 />
-                <button
-                  type="button"
-                  className="h-9 w-9 rounded-full grid place-items-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                >
-                  {busy ? (
-                    '…'
-                  ) : (
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                    >
-                      <circle cx="11" cy="11" r="7" />
-                      <path d="M20 20l-3-3" />
-                    </svg>
-                  )}
-                </button>
+                <div className="h-9 w-9 rounded-full grid place-items-center bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  {busy ? '…' : '🔍'}
+                </div>
               </div>
-
               {results.length > 0 && (
-                <div className="absolute z-10 mt-2 w-full max-h-56 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-lg">
+                <div className="absolute top-full left-0 right-0 mt-2 max-h-56 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-xl">
                   {results.map((r) => (
                     <button
                       key={`${r.pid}-${r.es_servicio ? 's' : 'p'}`}
                       type="button"
                       onClick={() => addFromSearch(r)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 flex items-center justify-between group"
+                      className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-50 flex justify-between items-center border-b border-neutral-50 last:border-0"
                     >
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        {/* IMAGEN EN EL BUSCADOR */}
-                        <div className="h-9 w-9 rounded bg-neutral-100 flex-shrink-0 overflow-hidden border border-neutral-200">
-                          {r.imagen ? (
-                            <img
-                              src={`${API_BASE}/uploads/${r.imagen}`}
-                              className="h-full w-full object-cover"
-                              alt=""
-                              onError={(e) => (e.target.style.display = 'none')}
-                            />
-                          ) : (
-                            <span className="grid place-items-center h-full w-full text-[10px] text-neutral-400">
-                              📷
-                            </span>
-                          )}
-                        </div>
-
-                        <span className="truncate">
-                          <span className="font-medium">{r.nombre}</span>
-                          {r.categoria ? (
-                            <span className="text-neutral-400"> • {r.categoria}</span>
-                          ) : null}
-
-                          {/* ETIQUETAS VISUALES EN BUSCADOR */}
-                          {r.es_servicio ? (
-                            <span className="text-xs text-purple-600 ml-2 font-bold bg-purple-50 px-1 rounded">
-                              (Servicio)
-                            </span>
-                          ) : (
-                            <span className="text-xs text-blue-600 ml-2 font-bold">
-                              (Stock: {r.existencias})
-                              {r.lotes && r.lotes.length > 0 && (
-                                <span className="text-amber-600 ml-1">[Lotes]</span>
-                              )}
-                            </span>
-                          )}
+                      <span className="font-medium text-gray-800">{r.nombre}</span>
+                      <div className="flex items-center gap-2">
+                        {r.es_servicio ? (
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
+                            SERV
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-500">Stock: {r.existencias}</span>
+                        )}
+                        <span className="font-bold text-emerald-600 ml-2">
+                          ${Number(r.precio).toFixed(2)}
                         </span>
                       </div>
-
-                      <span className="ml-3 text-neutral-700 font-medium">
-                        ${Number(r.precio).toFixed(2)}
-                      </span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Header columnas */}
-            <div className="grid grid-cols-12 gap-3 text-sm text-neutral-600 mt-4">
-              <div className="col-span-2">Cantidad</div>
-              <div className="col-span-4 sm:col-span-5">Nombre</div>
-              <div className="col-span-3 sm:col-span-2">Precio unitario</div>
-              <div className="col-span-3 sm:col-span-3">Total</div>
+            {/* Tabla Productos */}
+            <div className="mt-4 space-y-2">
+              <div className="grid grid-cols-12 gap-3 text-xs font-bold text-gray-500 uppercase px-2">
+                <div className="col-span-2">Cant</div>
+                <div className="col-span-5">Descripción</div>
+                <div className="col-span-2">Precio</div>
+                <div className="col-span-2">Total</div>
+                <div className="col-span-1"></div>
+              </div>
+
+              {pages.map((rows, idx) => (
+                <div key={idx} ref={(el) => (pageRefs.current[idx] = el)} className="space-y-2">
+                  {rows.map((p, i) => {
+                    const globalIndex = idx * PAGE_SIZE + i
+                    return (
+                      <div
+                        key={globalIndex}
+                        className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-100"
+                      >
+                        <InputGreen
+                          type="number"
+                          min="0"
+                          max={p.maxStock || 999999}
+                          value={p.cant}
+                          onChange={(e) => setProd(globalIndex, 'cant', e.target.value)}
+                          className="col-span-2 bg-white text-center font-bold"
+                        />
+                        <div className="col-span-5 relative">
+                          <InputGreen
+                            value={p.nombre}
+                            onChange={(e) => setProd(globalIndex, 'nombre', e.target.value)}
+                            className="w-full bg-white"
+                          />
+                          {p.es_servicio && (
+                            <span className="absolute right-2 top-2 text-[10px] bg-purple-100 text-purple-700 px-1 rounded font-bold">
+                              SERV
+                            </span>
+                          )}
+                        </div>
+                        <InputGreen
+                          type="number"
+                          step="0.01"
+                          value={p.precio}
+                          onChange={(e) => setProd(globalIndex, 'precio', e.target.value)}
+                          className="col-span-2 bg-white text-right"
+                        />
+                        <div className="col-span-2 text-right font-medium text-gray-700 pt-2">
+                          ${(totalFila(p) || 0).toFixed(2)}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(globalIndex)}
+                          className="col-span-1 flex justify-center text-red-400 hover:text-red-600"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => {
+                  addEmptyRow()
+                  setTimeout(() => goTo(pages.length), 0)
+                }}
+                className="w-full py-2 mt-2 border-2 border-dashed border-gray-300 text-gray-500 rounded-xl hover:border-emerald-400 hover:text-emerald-500 transition-colors text-sm font-medium"
+              >
+                + Agregar fila vacía
+              </button>
             </div>
           </section>
 
-          {/* Filas paginadas */}
-          {pages.map((rows, idx) => (
-            <section
-              key={idx}
-              ref={(el) => (pageRefs.current[idx] = el)}
-              className="snap-start mt-2"
-            >
-              <div className="space-y-3 w-full">
-                {rows.map((p, i) => {
-                  const globalIndex = idx * PAGE_SIZE + i
-                  return (
-                    <div key={globalIndex} className="grid grid-cols-12 gap-2 items-center">
-                      <InputGreen
-                        type="number"
-                        min="0"
-                        // Si es servicio, input sin límite (999999). Si es producto, su stock.
-                        max={p.maxStock || 999999}
-                        value={p.cant}
-                        onChange={(e) => setProd(globalIndex, 'cant', e.target.value)}
-                        placeholder="Cant."
-                        className="col-span-2"
-                        title={
-                          p.maxStock ? `Máximo disponible: ${p.maxStock}` : 'Servicio / Ilimitado'
-                        }
-                      />
+          {/* 3. DESCUENTOS (NUEVA SECCIÓN) */}
+          <section className="snap-start mt-8">
+            <div className="flex justify-between items-center mb-2">
+              <LabelSection>Descuentos</LabelSection>
+              <button
+                type="button"
+                onClick={() => setShowManualDesc(!showManualDesc)}
+                className="text-sm text-emerald-600 font-medium hover:underline"
+              >
+                {showManualDesc ? 'Ocultar Manual' : '+ Agregar Manual'}
+              </button>
+            </div>
 
-                      <div className="col-span-4 sm:col-span-5 relative">
-                        <InputGreen
-                          value={p.nombre}
-                          onChange={(e) => setProd(globalIndex, 'nombre', e.target.value)}
-                          placeholder="Brocha"
-                          className="w-full"
-                        />
-                        {/* Etiqueta flotante de stock o servicio */}
-                        {p.maxStock !== null && !p.es_servicio && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-neutral-400 bg-white px-1 border border-neutral-100 rounded">
-                            Max: {p.maxStock}
-                          </span>
-                        )}
-                        {p.es_servicio && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-purple-600 bg-purple-50 px-1 font-bold border border-purple-100 rounded">
-                            SERV
-                          </span>
-                        )}
-                      </div>
-
-                      <InputGreen
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={p.precio}
-                        onChange={(e) => setProd(globalIndex, 'precio', e.target.value)}
-                        placeholder="$0.00"
-                        className="col-span-3 sm:col-span-2"
-                      />
-                      <InputGreen
-                        readOnly
-                        value={`$${(totalFila(p) || 0).toFixed(2)}`}
-                        className="col-span-2 sm:col-span-2"
-                      />
+            {/* Buscador de Descuentos */}
+            {!showManualDesc && (
+              <div className="relative mb-3 z-10">
+                <input
+                  value={qDesc}
+                  onChange={(e) => setQDesc(e.target.value)}
+                  placeholder="Buscar descuento guardado..."
+                  className="h-9 w-full rounded-full px-4 text-sm ring-1 ring-neutral-200 bg-white outline-none focus:ring-emerald-500"
+                />
+                {filteredDescuentos.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-2 max-h-40 overflow-auto bg-white rounded-xl ring-1 ring-neutral-200 shadow-xl">
+                    {filteredDescuentos.map((d) => (
                       <button
+                        key={d.id}
                         type="button"
-                        onClick={() => removeRow(globalIndex)}
-                        className="col-span-1 text-rose-600 hover:text-rose-700"
-                        title="Eliminar fila"
+                        onClick={() => addDiscount(d)}
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-neutral-50 flex justify-between"
                       >
-                        ✕
+                        <span>{d.nombre}</span>
+                        <span className="font-bold text-blue-600">
+                          {d.tipo === 'Porcentual'
+                            ? `${d.cantidad}%`
+                            : `$${Number(d.cantidad).toFixed(2)}`}
+                        </span>
                       </button>
-                    </div>
-                  )
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
-              {pages.length > 1 && (
-                <div className="flex items-center justify-between mt-3">
+            )}
+
+            {/* Formulario Manual */}
+            {showManualDesc && (
+              <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mb-3 flex gap-2 items-end">
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-blue-800 ml-1">Tipo</label>
+                  <select
+                    value={manualDesc.tipo}
+                    onChange={(e) => setManualDesc({ ...manualDesc, tipo: e.target.value })}
+                    className="w-full h-9 rounded-lg border-blue-200 text-sm px-2 outline-none focus:ring-2 focus:ring-blue-300"
+                  >
+                    <option value="Porcentual">Porcentual (%)</option>
+                    <option value="Monetario">Monetario ($)</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs font-bold text-blue-800 ml-1">Cantidad</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={manualDesc.cantidad}
+                    onChange={(e) => setManualDesc({ ...manualDesc, cantidad: e.target.value })}
+                    className="w-full h-9 rounded-lg border border-blue-200 px-3 text-sm outline-none focus:ring-2 focus:ring-blue-300"
+                    placeholder="0"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (Number(manualDesc.cantidad) > 0) {
+                      addDiscount({
+                        nombre: 'Descuento Manual',
+                        tipo: manualDesc.tipo,
+                        cantidad: Number(manualDesc.cantidad),
+                        isManual: true
+                      })
+                    }
+                  }}
+                  className="h-9 px-4 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700"
+                >
+                  Agregar
+                </button>
+              </div>
+            )}
+
+            {/* Lista de Descuentos Aplicados */}
+            <div className="space-y-2">
+              {appliedDescuentos.map((d, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between items-center bg-white p-2 rounded-lg border border-neutral-200 text-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-red-500 font-bold">↓</span>
+                    <span className="font-medium text-gray-700">{d.nombre}</span>
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded font-bold ${d.tipo === 'Porcentual' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}
+                    >
+                      {d.tipo === 'Porcentual'
+                        ? `${d.cantidad}%`
+                        : `$${Number(d.cantidad).toFixed(2)}`}
+                    </span>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => goTo(pageIdx - 1)}
-                    className="px-3 py-1.5 rounded-lg text-sm ring-1 ring-neutral-300 hover:bg-neutral-50"
+                    onClick={() => removeDiscount(i)}
+                    className="text-neutral-400 hover:text-red-500 px-2"
                   >
-                    ▲
-                  </button>
-                  <Dots total={pages.length} active={pageIdx} onClick={goTo} />
-                  <button
-                    type="button"
-                    onClick={() => goTo(pageIdx + 1)}
-                    className="px-3 py-1.5 rounded-lg text-sm ring-1 ring-neutral-300 hover:bg-neutral-50"
-                  >
-                    ▼
+                    ✕
                   </button>
                 </div>
+              ))}
+              {appliedDescuentos.length === 0 && (
+                <p className="text-center text-xs text-gray-400 italic py-2">
+                  No hay descuentos aplicados
+                </p>
               )}
-            </section>
-          ))}
-
-          {/* Agregar fila manualmente */}
-          <section className="snap-start mt-4">
-            <button
-              type="button"
-              onClick={() => {
-                addEmptyRow()
-                setTimeout(() => goTo(pages.length), 0)
-              }}
-              className="w-full h-11 rounded-xl font-semibold text-white bg-gradient-to-r from-sky-400 via-fuchsia-500 to-purple-500 shadow-sm"
-            >
-              Agregar Producto
-            </button>
+            </div>
           </section>
 
-          <section className="snap-start mt-8 pb-2">
-            <LabelSection>Tipo de pago</LabelSection>
-            <div className="mb-3"></div>
-            <Field>
+          {/* 4. Resumen Final */}
+          <section className="snap-start mt-8 bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <LabelSection>Resumen Financiero</LabelSection>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between text-gray-600">
+                <span>Subtotal Productos ({cantidadProductos}):</span>
+                <span>${subtotalProductos.toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-red-600 font-medium">
+                <span>Descuento Total:</span>
+                <span>- ${valorDescuentoTotal.toFixed(2)}</span>
+              </div>
+
+              <div className="h-px bg-gray-300 my-2"></div>
+
+              <div className="flex justify-between text-lg font-bold text-gray-900">
+                <span>Total a Pagar:</span>
+                <span className="text-emerald-600">${totalFinal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                Método de Pago
+              </label>
               <SelectGreen
                 value={f.tipo_de_pago}
                 onChange={(e) => up('tipo_de_pago', e.target.value)}
+                className="bg-white border border-gray-300 mt-0 h-10"
               >
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia">Transferencia</option>
                 <option value="Tarjeta de credito">Tarjeta de Crédito</option>
               </SelectGreen>
-            </Field>
-          </section>
-
-          {/* Resumen */}
-          <section className="snap-start mt-8 pb-2">
-            <LabelSection>Resumen</LabelSection>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-3">
-              <Field small label="Cantidad de productos">
-                <InputGreen readOnly value={resumen.cantidad || ''} placeholder="Cant." />
-              </Field>
-              <Field small label="Total final">
-                <InputGreen readOnly value={`$${resumen.total.toFixed(2)}`} placeholder="$0.00" />
-              </Field>
             </div>
           </section>
         </div>
 
-        {/* Botonera inferior */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-emerald-300 to-[#11A5A3] shadow-sm disabled:opacity-60"
-          >
-            {submitting ? 'Creando…' : 'Crear'}
-          </button>
+        {/* Footer Botones */}
+        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100">
           <button
             type="button"
             onClick={onClose}
-            className="h-11 rounded-xl text-white font-semibold bg-gradient-to-r from-rose-300 to-[#Da2864] shadow-sm"
+            className="h-12 rounded-xl text-gray-600 font-bold bg-gray-100 hover:bg-gray-200 transition-colors"
           >
             Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="h-12 rounded-xl text-white font-bold bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-lg transform active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Procesando...' : `Cobrar $${totalFinal.toFixed(2)}`}
           </button>
         </div>
       </form>
@@ -677,10 +751,10 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 }
 
 /* ---------- UI helpers ---------- */
-function Field({ label, children, small = false }) {
+function Field({ label, children }) {
   return (
     <div className="space-y-1">
-      <label className={`font-medium ${small ? 'text-sm' : 'text-[15px]'}`}>{label}</label>
+      <label className="text-sm font-medium text-gray-700">{label}</label>
       {children}
     </div>
   )
@@ -689,8 +763,8 @@ function Field({ label, children, small = false }) {
 function LabelSection({ children }) {
   return (
     <div>
-      <p className="font-semibold text-black">{children}</p>
-      <div className="mt-1 h-[3px] w-16 bg-neutral-900 rounded" />
+      <p className="font-bold text-gray-800 text-base">{children}</p>
+      <div className="mt-1 h-1 w-12 bg-emerald-500 rounded-full" />
     </div>
   )
 }
@@ -699,10 +773,7 @@ function InputGreen({ className = '', ...props }) {
   return (
     <input
       {...props}
-      className={
-        'h-11 w-full rounded-xl px-3 ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 placeholder-neutral-400 outline-none ' +
-        className
-      }
+      className={`h-10 w-full rounded-lg px-3 border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all placeholder-gray-400 ${className}`}
     />
   )
 }
@@ -711,31 +782,10 @@ function SelectGreen({ className = '', children, ...props }) {
   return (
     <select
       {...props}
-      className={
-        'h-11 w-full rounded-xl px-3 ring-1 ring-neutral-200 bg-emerald-50/40 text-neutral-800 outline-none appearance-none mt-4' +
-        className
-      }
+      className={`h-10 w-full rounded-lg px-3 border border-gray-300 bg-white text-gray-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none cursor-pointer ${className}`}
     >
       {children}
     </select>
-  )
-}
-
-function Dots({ total, active, onClick }) {
-  return (
-    <div className="flex items-center gap-2">
-      {Array.from({ length: total }).map((_, i) => (
-        <button
-          key={i}
-          type="button"
-          onClick={() => onClick(i)}
-          className={`h-2.5 w-2.5 rounded-full transition ${
-            i === active ? 'bg-neutral-800' : 'bg-neutral-300'
-          }`}
-          aria-label={`Ir a página ${i + 1}`}
-        />
-      ))}
-    </div>
   )
 }
 

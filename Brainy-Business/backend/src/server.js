@@ -61,6 +61,10 @@ const preciosRoutes = require('./routes/precios.routes')
 // 2. Usar la ruta
 app.use('/api/precios', preciosRoutes)
 
+const descuentosRoutes = require('./routes/descuentos.routes')
+// ...
+app.use('/api/descuentos', descuentosRoutes)
+
 // 2. INICIO DEL SERVIDOR
 const PORT = process.env.PORT || 3001
 
