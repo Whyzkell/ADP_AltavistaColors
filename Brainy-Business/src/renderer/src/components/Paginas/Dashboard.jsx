@@ -17,6 +17,12 @@ export default function Dashboard() {
   const [sales, setSales] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // ESTADO PARA LA COMISIÓN (4% por defecto o lo que esté guardado)
+  const [commissionRate, setCommissionRate] = useState(() => {
+    const saved = localStorage.getItem('tarjeta_comision')
+    return saved ? Number(saved) : 0.04 // 0.04 es 4%
+  })
+
   const fetchData = async () => {
     try {
       setLoading(true)
@@ -33,7 +39,7 @@ export default function Dashboard() {
         tipo: 'Factura',
         fecha: f.fecha_emision || f.fecha,
         monto: f.total || f.monto,
-        tipo_de_pago: f.tipo_de_pago // <--- AGREGADO
+        tipo_de_pago: f.tipo_de_pago
       }))
 
       const mappedCredits = (credits || []).map((c) => ({
@@ -41,7 +47,7 @@ export default function Dashboard() {
         tipo: 'Crédito Fiscal',
         fecha: c.fecha_emision || c.fecha,
         monto: c.total || c.monto,
-        tipo_de_pago: c.tipo_de_pago // <--- AGREGADO
+        tipo_de_pago: c.tipo_de_pago
       }))
 
       const allSales = [...mappedInvoices, ...mappedCredits]
@@ -73,6 +79,38 @@ export default function Dashboard() {
       timer: 2000,
       showConfirmButton: false
     })
+  }
+
+  // --- FUNCIÓN PARA CAMBIAR COMISIÓN ---
+  const handleChangeCommission = async () => {
+    const { value: newRate } = await Swal.fire({
+      title: 'Configurar Comisión',
+      text: 'Ingresa el porcentaje que cobra el banco (ej: 4 para 4%)',
+      input: 'number',
+      inputValue: commissionRate * 100, // Mostramos 4 en vez de 0.04
+      inputAttributes: {
+        min: 0,
+        max: 100,
+        step: 0.1
+      },
+      showCancelButton: true,
+      confirmButtonColor: '#11A5A3',
+      confirmButtonText: 'Guardar',
+      cancelButtonText: 'Cancelar'
+    })
+
+    if (newRate !== null && newRate !== undefined) {
+      const decimalRate = Number(newRate) / 100
+      setCommissionRate(decimalRate)
+      localStorage.setItem('tarjeta_comision', decimalRate) // Guardar persistente
+      Swal.fire({
+        icon: 'success',
+        title: 'Actualizado',
+        text: `La comisión ahora es del ${newRate}%`,
+        timer: 1500,
+        showConfirmButton: false
+      })
+    }
   }
 
   // --- LÓGICA DE FILTRADO Y CÁLCULO ---
@@ -109,18 +147,28 @@ export default function Dashboard() {
       }
     })
 
+    // Calcular Neto Tarjeta (Total Tarjeta - Comisión)
+    const comisionAmount = totalTarjeta * commissionRate
+    const tarjetaNeto = totalTarjeta - comisionAmount
+
+    // CALCULAR VENTA REAL TOTAL (Bruto - Comisión)
+    const salesTotalReal = totalAmount - comisionAmount
+
     const monthName = now.toLocaleString('es-ES', { month: 'long' })
     const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1)
 
     return {
       salesCount: salesThisMonth.length,
       salesTotal: totalAmount,
+      salesTotalReal: salesTotalReal, // <--- DATO NUEVO PARA EL CONTROL PANEL
       efectivo: totalEfectivo,
       transferencia: totalTransferencia,
-      tarjeta: totalTarjeta,
+      tarjetaBruto: totalTarjeta,
+      tarjetaNeto: tarjetaNeto,
+      comisionTotal: comisionAmount,
       currentMonthName: capitalizedMonth
     }
-  }, [sales])
+  }, [sales, commissionRate])
 
   return (
     <main className="flex-1 min-w-0">
@@ -136,37 +184,81 @@ export default function Dashboard() {
           <ControlPanel
             salesCount={dashboardStats.salesCount}
             salesTotal={dashboardStats.salesTotal}
+            salesTotalReal={dashboardStats.salesTotalReal} // <--- PASAMOS LA PROP
             currentMonthName={dashboardStats.currentMonthName}
             onCobrar={() => setOpenCrearFactura(true)}
             onCredito={() => setOpenCrearCredito(true)}
           />
 
-          {/* --- NUEVA TARJETA DE TIPOS DE PAGO --- */}
-          <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-4">
-            <p className="text-sm font-semibold text-black">Desglose por Tipo de Pago</p>
-            <div className="mt-4 flex flex-wrap gap-6">
-              <div>
-                <p className="text-[11px] uppercase text-neutral-500">Efectivo</p>
-                <p className="text-lg font-semibold text-emerald-600">
+          {/* --- TARJETA DE TIPOS DE PAGO MEJORADA --- */}
+          <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-5 shadow-sm">
+            <div className="flex justify-between items-center mb-4 border-b border-neutral-100 pb-2">
+              <p className="text-sm font-bold text-gray-800">Desglose Financiero (Mes Actual)</p>
+              <button
+                onClick={handleChangeCommission}
+                className="text-xs text-neutral-400 hover:text-emerald-600 flex items-center gap-1 transition-colors"
+                title="Cambiar porcentaje de comisión"
+              >
+                <span>⚙️ Configurar Comisión ({(commissionRate * 100).toFixed(1)}%)</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-8">
+              {/* Efectivo */}
+              <div className="min-w-[120px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
+                    Efectivo
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-gray-900">
                   ${dashboardStats.efectivo.toFixed(2)}
                 </p>
               </div>
-              <div>
-                <p className="text-[11px] uppercase text-neutral-500">Transferencia</p>
-                <p className="text-lg font-semibold text-blue-600">
+
+              {/* Transferencia */}
+              <div className="min-w-[120px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
+                    Transferencia
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-gray-900">
                   ${dashboardStats.transferencia.toFixed(2)}
                 </p>
               </div>
-              <div>
-                <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito</p>
-                <p className="text-lg font-semibold text-purple-600">
-                  ${dashboardStats.tarjeta.toFixed(2)}
+
+              {/* Tarjeta Bruto (Total cobrado) */}
+              <div className="min-w-[120px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
+                    T. Crédito (Total)
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-gray-900">
+                  ${dashboardStats.tarjetaBruto.toFixed(2)}
                 </p>
               </div>
-              <div>
-                <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito - Comisión</p>
-                <p className="text-lg font-semibold text-purple-600">
-                  ${(dashboardStats.tarjeta.toFixed(2) - (dashboardStats.tarjeta * .04).toFixed(2)).toFixed(2)}
+
+              {/* Separador Vertical */}
+              <div className="w-px bg-neutral-200 hidden sm:block"></div>
+
+              {/* Tarjeta Neto (Lo que recibes) */}
+              <div className="min-w-[140px] bg-emerald-50/50 p-2 rounded-lg border border-emerald-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-emerald-600">🏦</span>
+                  <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide">
+                    Recibido Real (Sin Com.)
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-emerald-700">
+                  ${dashboardStats.tarjetaNeto.toFixed(2)}
+                </p>
+                <p className="text-[10px] text-emerald-600/70 mt-1">
+                  - ${dashboardStats.comisionTotal.toFixed(2)} comisión
                 </p>
               </div>
             </div>
