@@ -123,7 +123,7 @@ export default function Estadisticas() {
         if (observe === 'products') {
           if (product) {
             params.observe = 'product'
-            params.productId = product.id
+            params.productId = product.id_producto || product.id
           } else {
             params.observe = 'general'
           }

@@ -39,7 +39,7 @@ export default function Sidebar({ className = '' }) {
       <nav className="px-4 flex-1 flex flex-col gap-1">
         <SidebarLink label="Inicio" to="/" icon="resources/Dashboard.png" />
         <SidebarLink label="Inventario" to="/Inventario" icon="resources/Lista.png" />
-
+        <SidebarLink label="Precios" to="/Precios" icon="resources/tags.png" />
         {/* --- NUEVAS PÁGINAS --- */}
         {/* Asegúrate de añadir Services.png y Calendar.png a tu carpeta resources */}
         <SidebarLink label="Servicios" to="/Servicios" icon="resources/Services.png" />
