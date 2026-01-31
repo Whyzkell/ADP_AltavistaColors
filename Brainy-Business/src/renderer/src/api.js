@@ -126,6 +126,7 @@ export async function createInvoice(payload) {
     nit: payload.nit?.trim(),
     condiciones: payload.condiciones?.trim() || null,
     tipo_de_pago: payload.tipo_de_pago,
+    fecha_emision: payload.fecha_emision,
 
     // --- CORRECCIÓN: AGREGAR ESTAS DOS LÍNEAS ---
     // Sin esto, el backend nunca se entera del descuento

@@ -341,9 +341,15 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
     try {
       setSubmitting(true)
 
-      // Decidimos qué ID de descuento enviar:
-      // Si hay SOLO UN descuento aplicado y viene de la BD (tiene ID), lo mandamos.
-      // Si son varios, o son manuales, mandamos null (pero el valor_descuento siempre va).
+      // --- CORRECCIÓN DE FECHA: GENERAR FECHA LOCAL (YYYY-MM-DD) ---
+      // Obtenemos la fecha local exacta para evitar problemas de zona horaria UTC
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      const fechaLocal = `${year}-${month}-${day}` // Ejemplo: "2026-01-31"
+      // -------------------------------------------------------------
+
       const singleDbDiscount =
         appliedDescuentos.length === 1 && appliedDescuentos[0].id ? appliedDescuentos[0].id : null
 
@@ -359,7 +365,10 @@ export default function CreateInvoiceModal({ open, onClose, onCreate }) {
 
         // DATOS DE DESCUENTO
         descuento_id: singleDbDiscount,
-        valor_descuento: valorDescuentoTotal
+        valor_descuento: valorDescuentoTotal,
+
+        // --- ENVIAMOS LA FECHA LOCAL ---
+        fecha_emision: fechaLocal 
       })
 
       onCreate?.(saved)

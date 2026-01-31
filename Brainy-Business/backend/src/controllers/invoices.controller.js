@@ -47,14 +47,17 @@ exports.create = async (req, res) => {
     tipo_de_pago,
     // Datos del descuento
     descuento_id = null,
-    valor_descuento = 0
+    valor_descuento = 0,
+    // Fecha recibida desde el frontend
+    fecha_emision = null 
   } = req.body
 
-  // --- DEBUG LOGS (Mira esto en tu terminal negra) ---
+  // --- DEBUG LOGS ---
   console.log('--- NUEVA FACTURA ---')
   console.log('Cliente:', cliente)
+  console.log('Fecha Emisión (Local):', fecha_emision)
   console.log('Descuento recibido ($):', valor_descuento)
-  // ---------------------------------------------------
+  // -------------------
 
   if (!cliente.trim()) return res.status(400).json({ error: 'Cliente requerido' })
 
@@ -79,15 +82,17 @@ exports.create = async (req, res) => {
   try {
     await client.query('BEGIN')
 
-    // 2. Insertar Factura (Total inicia en 0)
-    const {
-      rows: [fact]
-    } = await client.query(
-      `INSERT INTO facturas
-          (numero, cliente, direccion, dui, nit, condiciones, usuario_id, fecha_emision, total, payload, tipo_de_pago, descuento_id, valor_descuento)
-        VALUES (NULL, $1, $2, $3, $4, $5, $6, CURRENT_DATE, 0, $7, $8, $9, $10)
-        RETURNING id, numero`,
-      [
+    // 2. Insertar Factura
+    // CORRECCIÓN: Agregamos ::DATE al parámetro $11 dentro de COALESCE
+    const insertQuery = `
+      INSERT INTO facturas
+        (numero, cliente, direccion, dui, nit, condiciones, usuario_id, payload, tipo_de_pago, descuento_id, valor_descuento, fecha_emision, total)
+      VALUES 
+        (NULL, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::DATE, CURRENT_DATE), 0)
+      RETURNING id, numero
+    `
+    
+    const { rows: [factNew] } = await client.query(insertQuery, [
         cliente,
         direccion,
         dui,
@@ -96,10 +101,13 @@ exports.create = async (req, res) => {
         userId,
         meta,
         tipo_de_pago || 'Efectivo',
-        descuento_id || null, // $9
-        Number(valor_descuento || 0) // $10
-      ]
-    )
+        descuento_id || null,
+        Number(valor_descuento || 0),
+        fecha_emision || null // $11
+    ])
+    
+    const factID = factNew.id
+    const factNumero = factNew.numero
 
     // 3. Insertar Items
     for (const it of items) {
@@ -109,7 +117,7 @@ exports.create = async (req, res) => {
       await client.query(
         `INSERT INTO factura_items (factura_id, producto_id, servicio_id, lote_id, nombre, cantidad, precio_unit)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [fact.id, prodId, servId, it.lote_id, it.nombre, it.cantidad, it.precio]
+        [factID, prodId, servId, it.lote_id, it.nombre, it.cantidad, it.precio]
       )
 
       // Descontar inventario
@@ -128,12 +136,11 @@ exports.create = async (req, res) => {
     }
 
     // 4. CALCULAR TOTAL FINAL
-    // Obtenemos la suma bruta de los items (Subtotal)
     const {
       rows: [resSum]
     } = await client.query(
       `SELECT COALESCE(SUM(total), 0) as grand_total FROM factura_items WHERE factura_id = $1`,
-      [fact.id]
+      [factID]
     )
 
     const subtotal = Number(resSum.grand_total)
@@ -145,11 +152,11 @@ exports.create = async (req, res) => {
     )
 
     // 5. ACTUALIZAR FACTURA CON EL TOTAL RESTADO
-    await client.query(`UPDATE facturas SET total = $1 WHERE id = $2`, [totalFinal, fact.id])
+    await client.query(`UPDATE facturas SET total = $1 WHERE id = $2`, [totalFinal, factID])
 
     await client.query('COMMIT')
 
-    return res.json({ id: fact.id, numero: fact.numero, total: totalFinal })
+    return res.json({ id: factID, numero: factNumero, total: totalFinal })
   } catch (e) {
     await client.query('ROLLBACK')
     console.error('Error creando factura:', e)
