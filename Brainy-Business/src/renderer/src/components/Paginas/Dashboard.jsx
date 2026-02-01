@@ -87,7 +87,7 @@ export default function Dashboard() {
       title: 'Configurar Comisión',
       text: 'Ingresa el porcentaje que cobra el banco (ej: 4 para 4%)',
       input: 'number',
-      inputValue: commissionRate * 100, // Mostramos 4 en vez de 0.04
+      inputValue: commissionRate * 100,
       inputAttributes: {
         min: 0,
         max: 100,
@@ -102,7 +102,7 @@ export default function Dashboard() {
     if (newRate !== null && newRate !== undefined) {
       const decimalRate = Number(newRate) / 100
       setCommissionRate(decimalRate)
-      localStorage.setItem('tarjeta_comision', decimalRate) // Guardar persistente
+      localStorage.setItem('tarjeta_comision', decimalRate)
       Swal.fire({
         icon: 'success',
         title: 'Actualizado',
@@ -115,23 +115,27 @@ export default function Dashboard() {
 
   // --- LÓGICA DE FILTRADO Y CÁLCULO ---
   const dashboardStats = useMemo(() => {
+    // Usamos fecha local para evitar problemas de zona horaria el día 31
     const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
+    const currentYear = now.getFullYear() // Usar getFullYear en vez de getUTCFullYear
+    const currentMonth = now.getMonth()   // Usar getMonth en vez de getUTCMonth
 
     const salesThisMonth = sales.filter((venta) => {
       if (!venta.fecha) return false
-      const ventaDate = new Date(venta.fecha)
-      return ventaDate.getUTCFullYear() === currentYear && ventaDate.getUTCMonth() === currentMonth
+      // Convertimos la fecha de venta asegurando que se interprete localmente
+      // (Asumiendo que backend manda YYYY-MM-DD, al hacer new Date se puede ir al día anterior en UTC)
+      // Truco: Agregar 'T00:00:00' o usar split para asegurar
+      const parts = venta.fecha.split('T')[0].split('-')
+      const ventaDate = new Date(parts[0], parts[1] - 1, parts[2]) // Año, Mes (0-idx), Día
+      
+      return ventaDate.getFullYear() === currentYear && ventaDate.getMonth() === currentMonth
     })
 
-    // Inicializamos contadores
     let totalAmount = 0
     let totalEfectivo = 0
     let totalTransferencia = 0
     let totalTarjeta = 0
 
-    // Sumar montos
     salesThisMonth.forEach((venta) => {
       const monto = Number(venta.monto || 0)
       const tipoPago = (venta.tipo_de_pago || 'Efectivo').toLowerCase()
@@ -150,7 +154,7 @@ export default function Dashboard() {
     // Calcular Neto Tarjeta (Total Tarjeta - Comisión)
     const comisionAmount = totalTarjeta * commissionRate
     const tarjetaNeto = totalTarjeta - comisionAmount
-
+    
     // CALCULAR VENTA REAL TOTAL (Bruto - Comisión)
     const salesTotalReal = totalAmount - comisionAmount
 
@@ -160,11 +164,11 @@ export default function Dashboard() {
     return {
       salesCount: salesThisMonth.length,
       salesTotal: totalAmount,
-      salesTotalReal: salesTotalReal, // <--- DATO NUEVO PARA EL CONTROL PANEL
+      salesTotalReal: salesTotalReal, 
       efectivo: totalEfectivo,
       transferencia: totalTransferencia,
       tarjetaBruto: totalTarjeta,
-      tarjetaNeto: tarjetaNeto,
+      tarjetaNeto: tarjetaNeto, 
       comisionTotal: comisionAmount,
       currentMonthName: capitalizedMonth
     }
@@ -184,7 +188,7 @@ export default function Dashboard() {
           <ControlPanel
             salesCount={dashboardStats.salesCount}
             salesTotal={dashboardStats.salesTotal}
-            salesTotalReal={dashboardStats.salesTotalReal} // <--- PASAMOS LA PROP
+            salesTotalReal={dashboardStats.salesTotalReal}
             currentMonthName={dashboardStats.currentMonthName}
             onCobrar={() => setOpenCrearFactura(true)}
             onCredito={() => setOpenCrearCredito(true)}
@@ -194,7 +198,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-xl ring-1 ring-neutral-200 p-5 shadow-sm">
             <div className="flex justify-between items-center mb-4 border-b border-neutral-100 pb-2">
               <p className="text-sm font-bold text-gray-800">Desglose Financiero (Mes Actual)</p>
-              <button
+              <button 
                 onClick={handleChangeCommission}
                 className="text-xs text-neutral-400 hover:text-emerald-600 flex items-center gap-1 transition-colors"
                 title="Cambiar porcentaje de comisión"
@@ -202,15 +206,13 @@ export default function Dashboard() {
                 <span>⚙️ Configurar Comisión ({(commissionRate * 100).toFixed(1)}%)</span>
               </button>
             </div>
-
+            
             <div className="flex flex-wrap gap-8">
               {/* Efectivo */}
               <div className="min-w-[120px]">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
-                    Efectivo
-                  </p>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Efectivo</p>
                 </div>
                 <p className="text-xl font-bold text-gray-900">
                   ${dashboardStats.efectivo.toFixed(2)}
@@ -221,9 +223,7 @@ export default function Dashboard() {
               <div className="min-w-[120px]">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
-                    Transferencia
-                  </p>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">Transferencia</p>
                 </div>
                 <p className="text-xl font-bold text-gray-900">
                   ${dashboardStats.transferencia.toFixed(2)}
@@ -234,9 +234,7 @@ export default function Dashboard() {
               <div className="min-w-[120px]">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">
-                    T. Crédito (Total)
-                  </p>
+                  <p className="text-xs font-medium text-neutral-500 uppercase tracking-wide">T. Crédito (Total)</p>
                 </div>
                 <p className="text-xl font-bold text-gray-900">
                   ${dashboardStats.tarjetaBruto.toFixed(2)}

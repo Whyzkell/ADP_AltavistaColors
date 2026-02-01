@@ -53,7 +53,7 @@ function fmtFecha(d) {
 
 const Menu = ({ onView, onDelete }) => (
   <div className="absolute right-0 mt-1 w-32 bg-white rounded-xl shadow-lg ring-1 ring-neutral-200 py-2 z-20">
-    <button onClick={onView} className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50">
+    <button onClick={onView} className="w-full text-left px-3 py-2 text-sm hover:bg-neutral-50 text-neutral-700">
       Ver detalles
     </button>
     <div className="h-px bg-neutral-200 mx-2" />
@@ -91,7 +91,7 @@ export default function Ventas() {
         fecha: f.fecha_emision || f.fecha,
         tipo: 'Factura',
         monto: f.total || f.monto,
-        tipo_de_pago: f.tipo_de_pago // <--- AGREGADO: Leemos el tipo de pago
+        tipo_de_pago: f.tipo_de_pago 
       }))
 
       const mappedCreditos = creditos.map((c) => ({
@@ -101,11 +101,18 @@ export default function Ventas() {
         fecha: c.fecha_emision || c.fecha,
         tipo: 'Crédito Fiscal',
         monto: c.total || c.monto,
-        tipo_de_pago: c.tipo_de_pago // <--- AGREGADO: Leemos el tipo de pago
+        tipo_de_pago: c.tipo_de_pago 
       }))
 
       const allVentas = [...mappedFacturas, ...mappedCreditos]
-      allVentas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+      
+      // Ordenar por fecha descendente
+      allVentas.sort((a, b) => {
+        // Convertimos a Date de forma segura
+        const da = new Date(a.fecha)
+        const db = new Date(b.fecha)
+        return db - da
+      })
 
       setVentas(allVentas)
     } catch (e) {
@@ -140,14 +147,17 @@ export default function Ventas() {
   // --- LÓGICA DE ESTADÍSTICAS DEL MES ACTUAL ---
   const monthStats = useMemo(() => {
     const now = new Date()
-    const currentYear = now.getUTCFullYear()
-    const currentMonth = now.getUTCMonth()
+    const currentYear = now.getFullYear() // Usar local
+    const currentMonth = now.getMonth()   // Usar local
 
-    // 1. Filtramos las ventas de este mes
+    // 1. Filtramos las ventas de este mes (CORREGIDO PARA ZONA HORARIA)
     const thisMonthSales = ventas.filter((v) => {
       if (!v.fecha) return false
-      const d = new Date(v.fecha)
-      return d.getUTCFullYear() === currentYear && d.getUTCMonth() === currentMonth
+      // Parsear fecha 'YYYY-MM-DD' a componentes locales
+      const parts = String(v.fecha).split('T')[0].split('-')
+      const d = new Date(parts[0], parts[1] - 1, parts[2])
+      
+      return d.getFullYear() === currentYear && d.getMonth() === currentMonth
     })
 
     // 2. Inicializamos contadores
@@ -168,7 +178,6 @@ export default function Ventas() {
       } else if (tipoPago.includes('transferencia')) {
         totalTransferencia += monto
       } else {
-        // Por defecto todo lo demás (o 'Efectivo') va a efectivo
         totalEfectivo += monto
       }
     })
@@ -285,16 +294,16 @@ export default function Ventas() {
             <div className="mt-4 flex flex-wrap gap-4">
               <button
                 onClick={() => setOpenFactura(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold transition-colors"
               >
-                <img src={FacturaIcon} className="w-5 h-5" alt="" />
+                <img src={FacturaIcon} className="w-5 h-5" alt="Factura" />
                 Factura
               </button>
               <button
                 onClick={() => setOpenCredito(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#11A5A3] hover:bg-[#Da2864] text-white text-sm font-semibold transition-colors"
               >
-                <img src={CreditoIcon} className="w-5 h-5" alt="" />
+                <img src={CreditoIcon} className="w-5 h-5" alt="Crédito Fiscal" />
                 Crédito fiscal
               </button>
             </div>
@@ -324,11 +333,11 @@ export default function Ventas() {
               </p>
             </div>
             <div>
-                <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito - Comisión</p>
-                <p className="text-lg font-semibold text-purple-600">
-                  ${(monthStats.tarjeta.toFixed(2) - (monthStats.tarjeta * .04).toFixed(2)).toFixed(2)}
-                </p>
-              </div>
+              <p className="text-[11px] uppercase text-neutral-500">Tarjeta de Crédito - Comisión</p>
+              <p className="text-lg font-semibold text-purple-600">
+                ${(monthStats.tarjeta.toFixed(2) - (monthStats.tarjeta * .04).toFixed(2)).toFixed(2)}
+              </p>
+            </div>
           </div>
           
         </div>
@@ -353,7 +362,7 @@ export default function Ventas() {
             </div>
           </div>
 
-          <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 overflow-hidden">
+          <div className="mt-4 bg-white rounded-xl ring-1 ring-neutral-200 overflow-visible">
             <table className="w-full text-sm">
               <thead className="bg-neutral-50 text-neutral-600">
                 <tr>
@@ -361,7 +370,7 @@ export default function Ventas() {
                   <th className="px-4 py-3 text-left">Cliente</th>
                   <th className="px-4 py-3 text-left">Fecha</th>
                   <th className="px-4 py-3 text-left">Tipo</th>
-                  <th className="px-4 py-3 text-left">Pago</th> {/* <--- NUEVA COLUMNA */}
+                  <th className="px-4 py-3 text-left">Pago</th> 
                   <th className="px-4 py-3 text-left">Venta dólares</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -376,25 +385,28 @@ export default function Ventas() {
                 )}
                 {!loading &&
                   filtered.map((v, idx) => (
-                    <tr key={`${v.tipo}-${v.api_id}`}>
+                    <tr key={`${v.tipo}-${v.api_id}`} className="hover:bg-neutral-50">
                       <td className="px-4 py-3 font-mono text-neutral-600">{v.id}</td>
-                      <td className="px-4 py-3">{v.cliente}</td>
-                      <td className="px-4 py-3">{fmtFecha(v.fecha)}</td>
-                      <td className="px-4 py-3">{v.tipo}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">{v.cliente}</td>
+                      <td className="px-4 py-3 text-gray-500">{fmtFecha(v.fecha)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${v.tipo === 'Factura' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                          {v.tipo}
+                        </span>
+                      </td>
 
-                      {/* NUEVA CELDA CON EL COMPONENTE */}
                       <td className="px-4 py-3">
                         <PillPago value={v.tipo_de_pago} />
                       </td>
 
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 font-medium">
                         <PillMoney value={v.monto} />
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="relative inline-block">
                           <button
                             onClick={() => setOpenMenu(openMenu === idx ? null : idx)}
-                            className="p-2 rounded-lg hover:bg-neutral-100"
+                            className="p-2 rounded-lg hover:bg-neutral-200 text-neutral-500 transition-colors"
                           >
                             ⋮
                           </button>
@@ -427,14 +439,13 @@ export default function Ventas() {
         </div>
       </div>
 
-      {/* MODAL FACTURA: Usamos onCreate para lanzar la alerta */}
+      {/* MODALES */}
       <CreateInvoiceModal
         open={openFactura}
         onClose={() => setOpenFactura(false)}
         onCreate={handleCreateFactura}
       />
 
-      {/* MODAL CRÉDITO: El modal ya tiene la alerta interna, solo recargamos */}
       <CreateCreditoFiscalModal
         open={openCredito}
         onClose={() => {

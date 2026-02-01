@@ -7,7 +7,7 @@ export default function ControlPanel({
   onCredito,
   salesCount = 0,
   salesTotal = 0,
-  salesTotalReal = 0, // <--- NUEVA PROP
+  salesTotalReal = 0,
   currentMonthName = 'Mes Actual'
 }) {
   return (
@@ -17,7 +17,7 @@ export default function ControlPanel({
         <div className="flex justify-between items-start">
           <p className="text-sm font-semibold text-black">Resumen {currentMonthName}</p>
         </div>
-
+        
         <div className="mt-4 flex flex-wrap gap-8">
           {/* Ventas Totales (Bruto) */}
           <div>
@@ -27,13 +27,8 @@ export default function ControlPanel({
 
           {/* Venta Real (Neto) - NUEVO */}
           <div>
-            <p className="text-[11px] uppercase text-emerald-600 font-bold">
-              Venta Real (Sin Com.)
-            </p>
-            <p
-              className="text-lg text-emerald-600 font-bold"
-              title="Dinero recibido tras comisiones"
-            >
+            <p className="text-[11px] uppercase text-emerald-600 font-bold">Venta Real (Sin Com.)</p>
+            <p className="text-lg text-emerald-600 font-bold" title="Dinero recibido tras comisiones">
               ${Number(salesTotalReal).toFixed(2)}
             </p>
           </div>
